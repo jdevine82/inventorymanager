@@ -1,0 +1,3354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Border to Border Inventory Manager</title>
+<style>
+  :root {
+    --bg:        #0f1623;
+    --surface:   #161d2e;
+    --surface2:  #1e2433;
+    --surface3:  #252f42;
+    --border:    #2d3748;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --subtle:    #94a3b8;
+    --green:     #4ade80;
+    --orange:    #fb923c;
+    --yellow:    #fde68a;
+    --red:       #f87171;
+    --blue:      #60a5fa;
+    --violet:    #a78bfa;
+    --teal:      #34d399;
+    --amber:     #fbbf24;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+  header p  { font-size: 11px; color: var(--muted); }
+  .header-stats { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .stat-badge {
+    font-size: 11px; padding: 3px 9px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--subtle);
+  }
+  #save-indicator { color: var(--green); }
+
+  main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 14px 20px 12px; gap: 12px; }
+
+  /* ── Toolbar ── */
+  .toolbar { display: flex; gap: 7px; align-items: center; flex-shrink: 0; }
+  .toolbar-right { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+
+  /* ── Buttons ── */
+  button {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 13px; border-radius: 5px; border: 1px solid;
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    background: var(--surface2); color: var(--blue); border-color: #2d4a6d;
+    transition: background .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  button:hover { background: #243447; border-color: var(--blue); }
+  button:active { background: #1a2535; }
+  button.btn-import { background:#1a3352; border-color:var(--blue); color:var(--blue); }
+  button.btn-import:hover { background:#1e4068; }
+  button.btn-export { background:#2d2214; border-color:#f59e0b; color:var(--amber); }
+  button.btn-export:hover { background:#3d2c18; }
+  button.btn-sm8-export { background:#1e2a1e; border-color:#4ade80; color:#86efac; }
+  button.btn-sm8-export:hover { background:#243324; border-color:var(--green); }
+  button.btn-backup  { background:#1e2535; border-color:#6366f1; color:#a5b4fc; }
+  button.btn-backup:hover  { background:#252d45; border-color:#818cf8; }
+  button.btn-restore { background:#2a1e2a; border-color:#c084fc; color:#d8b4fe; }
+  button.btn-restore:hover { background:#341e34; border-color:#a855f7; }
+  button.btn-report  { background:#1e2a2a; border-color:#22d3ee; color:#67e8f9; }
+  button.btn-report:hover  { background:#1e3535; border-color:#06b6d4; }
+  button.btn-danger { background:#2d1414; border-color:#ef4444; color:var(--red); }
+  button.btn-danger:hover { background:#3d1a1a; }
+  button.btn-add    { background:#1e1f35; border-color:#7c3aed; color:var(--violet); }
+  button.btn-add:hover    { background:#26234a; }
+  button.btn-sm8    { background:#1e2a1e; border-color:#4ade80; color:#86efac; }
+  button.btn-sm8:hover    { background:#243324; border-color:var(--green); }
+  button.btn-middys { background:#1e2535; border-color:#38bdf8; color:#7dd3fc; }
+  button.btn-middys:hover { background:#1e3045; border-color:#0ea5e9; }
+  button.btn-voltex { background:#2a1e35; border-color:#c084fc; color:#d8b4fe; }
+  button.btn-voltex:hover { background:#341e45; border-color:#a855f7; }
+  button.btn-actrol  { background:#2a1a1a; border-color:#f97316; color:#fdba74; }
+  button.btn-actrol:hover  { background:#3a2010; border-color:#ea580c; }
+  button.btn-voltex { background:#2a1e35; border-color:#c084fc; color:#e9d5ff; }
+  button.btn-voltex:hover { background:#351e45; border-color:#a855f7; }
+  button.btn-green  { background:#14352a; border-color:#22c55e; color:var(--green); }
+  button.btn-green:hover  { background:#1a4535; }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* ── Search ── */
+  .search-wrap { position: relative; }
+  .search-wrap input {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 10px 6px 30px; font-size: 12px; width: 210px;
+    outline: none;
+  }
+  .search-wrap input:focus { border-color: var(--blue); }
+  .search-wrap::before {
+    content: '⌕'; position: absolute; left: 9px; top: 50%;
+    transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    font-size: 10px; color: #475569; padding: 2px 7px;
+    background: var(--surface); border: 1px solid #1e2740; border-radius: 4px;
+  }
+
+  /* ── Splitter ── */
+  .split-container { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
+  .pane { display: flex; flex-direction: column; overflow: hidden; }
+  .pane-top    { flex: 3; min-height: 120px; }
+  .pane-bottom { flex: 1; min-height: 100px; }
+  .pane-label {
+    font-size: 10px; font-weight: 600; letter-spacing: .07em;
+    color: var(--subtle); padding: 0 2px 5px; text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .divider {
+    height: 6px; background: var(--surface); border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border); cursor: row-resize;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .divider::after { content:''; width:32px; height:2px; border-radius:2px; background:var(--border); }
+  .divider:hover::after { background: var(--blue); }
+
+  .pane-header { display:flex; align-items:center; gap:8px; flex-shrink:0; padding-bottom:5px; }
+  .pane-header .pane-label { padding-bottom:0; }
+
+  /* ── Table wrapper ── */
+  .table-wrap {
+    flex: 1; overflow: auto; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--surface2);
+  }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead th {
+    background: var(--surface); color: var(--subtle);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; user-select: none;
+  }
+  thead th:last-child { border-right: none; }
+  thead th.computed { color: var(--muted); }
+  thead th .sort-arrow { font-size: 9px; margin-left: 3px; opacity: .5; }
+  thead th.sorted .sort-arrow { opacity: 1; color: var(--blue); }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; cursor: pointer; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:nth-child(even) { background: #1a2030; }
+  tbody tr:hover { background: #1d2840 !important; }
+  tbody tr.selected { background: #1a2f55 !important; }
+
+  td {
+    padding: 0; border-right: 1px solid var(--border);
+    overflow: hidden; white-space: nowrap;
+  }
+  td:last-child { border-right: none; }
+
+  td .cell-display {
+    padding: 7px 10px; display: block;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: default;
+  }
+  td.editable .cell-display { cursor: text; }
+  td.editable.select-cell .cell-display { cursor: pointer; }
+  td.editable:hover .cell-display { background: rgba(59,130,246,.07); }
+  td.computed .cell-display { color: var(--subtle); }
+
+  /* Inline edit input */
+  td input.cell-input {
+    width: 100%; height: 100%; padding: 6px 10px;
+    background: #1a3050; color: var(--text);
+    border: none; border-top: 1px solid var(--blue); border-bottom: 1px solid var(--blue);
+    outline: none; font-size: 12px; font-family: inherit;
+    display: block;
+  }
+
+  /* Inline select (markup code dropdown) */
+  td select.cell-select {
+    width: 100%; height: 100%; padding: 5px 8px;
+    background: #1a3050; color: var(--violet);
+    border: none; border-top: 1px solid var(--violet); border-bottom: 1px solid var(--violet);
+    outline: none; font-size: 12px; font-family: inherit;
+    display: block; cursor: pointer;
+  }
+  td select.cell-select option { background: #1e2433; color: var(--text); }
+
+  /* Col colours */
+  .col-sell   { color: var(--green); }
+  .col-cost   { color: var(--orange); }
+  .col-unit   { color: var(--yellow); }
+  .col-code   { color: var(--violet); }
+  .col-mpct   { color: #c4b5fd; }
+  .col-margin-pos { color: var(--teal); }
+  .col-margin-neg { color: var(--red); }
+  .col-margin-warn { color: var(--amber); }
+
+  /* ── Empty state ── */
+  .empty-row td {
+    text-align: center; padding: 32px; color: var(--muted);
+    font-size: 12px; border: none;
+  }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; backdrop-filter: blur(2px);
+  }
+  .modal-backdrop.hidden { display: none; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 24px; width: 420px; max-width: 95vw;
+  }
+  .modal h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+  .modal label { display: block; font-size: 11px; color: var(--subtle); margin-bottom: 3px; }
+  .modal input, .modal select {
+    width: 100%; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 10px; font-size: 13px; margin-bottom: 12px; outline: none;
+  }
+  .modal input:focus, .modal select:focus { border-color: var(--blue); }
+  .modal select option { background: var(--surface2); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+  /* ── Import Mapping Modal ── */
+  #import-modal .modal {
+    width: 780px; max-width: 96vw; max-height: 90vh;
+    display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  }
+  .import-header {
+    padding: 18px 22px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .import-header h2 { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .import-header p  { font-size: 11px; color: var(--muted); }
+  .import-body { flex: 1; overflow-y: auto; padding: 16px 22px; }
+  .import-footer {
+    padding: 12px 22px; border-top: 1px solid var(--border);
+    display: flex; gap: 10px; align-items: center; flex-shrink: 0;
+    background: var(--surface);
+  }
+
+  /* Mode options */
+  .import-mode { display: flex; gap: 10px; margin-bottom: 16px; }
+  .mode-btn {
+    flex: 1; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface2);
+    cursor: pointer; text-align: center; transition: all .15s;
+  }
+  .mode-btn.active {
+    border-color: var(--blue); background: #1a3050;
+  }
+  .mode-btn strong { display: block; font-size: 12px; color: var(--text); margin-bottom: 2px; }
+  .mode-btn span   { font-size: 10px; color: var(--muted); }
+  .mode-btn.active strong { color: var(--blue); }
+
+  /* Field mapping table */
+  .map-section-title {
+    font-size: 10px; font-weight: 600; letter-spacing: .07em;
+    color: var(--subtle); text-transform: uppercase; margin-bottom: 8px;
+  }
+  .map-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  .map-table th {
+    background: var(--surface); color: var(--muted);
+    font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+    padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left;
+  }
+  .map-table td { padding: 5px 10px; border-bottom: 1px solid #1e2740; vertical-align: middle; }
+  .map-table tr:last-child td { border-bottom: none; }
+  .csv-col-name {
+    font-size: 12px; color: var(--text); font-family: monospace;
+    background: var(--surface3); padding: 2px 7px; border-radius: 3px;
+  }
+  .map-arrow { color: var(--muted); font-size: 14px; text-align: center; width: 30px; }
+  .map-select {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 5px 8px; font-size: 12px; width: 100%; outline: none;
+    margin-bottom: 0;
+  }
+  .map-select:focus { border-color: var(--blue); }
+  .map-select option { background: var(--surface2); }
+  .map-select.mapped   { border-color: #22c55e; }
+  .map-select.ignored  { opacity: .5; }
+
+  /* Preview table */
+  .preview-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 5px; margin-bottom: 4px; }
+  .preview-table { border-collapse: collapse; font-size: 11px; min-width: 100%; }
+  .preview-table th {
+    background: var(--surface); color: var(--subtle);
+    padding: 5px 10px; border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border); white-space: nowrap; font-weight: 600;
+  }
+  .preview-table td {
+    padding: 4px 10px; border-bottom: 1px solid #1e2740;
+    border-right: 1px solid #1e2740; white-space: nowrap; color: var(--muted);
+  }
+  .preview-table tr:last-child td { border-bottom: none; }
+  .preview-note { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .import-progress { font-size: 11px; color: var(--subtle); margin-right: auto; }
+
+  /* ── Settings panel ── */
+  #settings-panel {
+    position: fixed; top: 0; right: 0; height: 100vh; width: 320px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 150; display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform .25s ease;
+    box-shadow: -4px 0 24px rgba(0,0,0,.4);
+  }
+  #settings-panel.open { transform: translateX(0); }
+  .settings-header {
+    padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .settings-header h2 { font-size: 14px; font-weight: 700; flex: 1; }
+  .settings-close {
+    background: none; border: none; color: var(--muted);
+    font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+    min-width: unset;
+  }
+  .settings-close:hover { color: var(--text); background: var(--surface2); }
+  .settings-body { flex: 1; overflow-y: auto; padding: 18px; }
+  .settings-section-title {
+    font-size: 10px; font-weight: 600; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--subtle); margin-bottom: 10px;
+  }
+  .settings-row { margin-bottom: 20px; }
+  .settings-row label {
+    display: block; font-size: 12px; color: var(--subtle); margin-bottom: 5px;
+  }
+  .settings-row .hint {
+    font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.4;
+  }
+  .settings-row select, .settings-row input {
+    width: 100%; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 10px; font-size: 13px; outline: none;
+  }
+  .settings-row select:focus, .settings-row input:focus { border-color: var(--blue); }
+  .settings-footer {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
+  #settings-backdrop {
+    position: fixed; inset: 0; z-index: 149;
+    background: rgba(0,0,0,.3);
+    display: none;
+  }
+  #settings-backdrop.open { display: block; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 7px; padding: 10px 16px;
+    font-size: 12px; color: var(--text);
+    transform: translateY(20px); opacity: 0;
+    transition: transform .2s, opacity .2s;
+    z-index: 200; pointer-events: none;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error   { border-color: var(--red);   color: var(--red);   }
+
+  /* ── CSV import hidden input ── */
+  #csv-input { display: none; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 7px; height: 7px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #475569; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <div>
+      <h1>Border to Border Inventory Manager</h1>
+      <p>Pack pricing · Markup codes · Auto sell price &amp; margin</p>
+    </div>
+    <div class="header-stats">
+      <span class="stat-badge" id="stat-count">0 products</span>
+      <span class="stat-badge" id="save-indicator">● Ready</span>
+      <button onclick="openSettings()" title="Settings"
+        style="padding:5px 9px;font-size:15px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;line-height:1;">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Product toolbar -->
+    <div class="toolbar">
+      <button class="btn-import" onclick="triggerImport()">⬆ Import CSV</button>
+      <button class="btn-sm8"    onclick="triggerSM8()">⬆ Import SM8</button>
+      <button class="btn-middys" onclick="triggerMiddys()">⬆ Import Middys</button>
+      <button class="btn-voltex" onclick="triggerVoltex()">⬆ Import Voltex</button>
+      <button class="btn-actrol"  onclick="triggerActrol()">⬆ Import Actrol</button>
+      <button class="btn-export"     onclick="exportCSV()">⬇ Export CSV</button>
+      <button class="btn-sm8-export" onclick="exportSM8()">⬇ Export SM8</button>
+      <button class="btn-green"  onclick="openAddProduct()">＋ Add Product</button>
+      <button class="btn-danger" onclick="deleteSelected()" id="btn-delete" disabled>✕ Delete Selected</button>
+      <button id="btn-recalc" onclick="recalculatePrices()"
+        style="background:#1e2a35;border:1px solid #38bdf8;color:#7dd3fc;border-radius:5px;
+               padding:6px 13px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;"
+        title="Re-compute all sell prices from unit cost × markup %">↻ Recalculate Prices</button>
+      <div class="toolbar-right">
+        <button class="btn-report"  onclick="printBinReport()"  title="Printable report of stocked items by bin location">📋 Bin Report</button>
+        <button class="btn-backup"  onclick="backupDatabase()"  title="Download a backup of the database">⬇ Backup DB</button>
+        <button class="btn-restore" onclick="triggerRestore()"  title="Restore database from a backup file">⬆ Restore DB</button>
+        <span class="legend">* auto-calculated</span>
+        <div class="search-wrap">
+          <input type="text" id="search" placeholder="Search products…" oninput="applyFilter()">
+        </div>
+      </div>
+    </div>
+
+    <div class="split-container" id="split">
+
+      <!-- Products pane -->
+      <div class="pane pane-top" id="pane-top">
+        <div class="pane-label">Products</div>
+        <div class="table-wrap" id="prod-wrap">
+          <table id="prod-table">
+            <thead>
+              <tr>
+                <th style="width:170px"   onclick="sortBy('name')"       data-col="name">Name <span class="sort-arrow">↕</span></th>
+                <th style="width:90px"    onclick="sortBy('sku')"        data-col="sku">SKU <span class="sort-arrow">↕</span></th>
+                <th style="width:95px"    onclick="sortBy('category')"   data-col="category">Category <span class="sort-arrow">↕</span></th>
+                <th style="width:68px"    onclick="sortBy('pack_qty')"   data-col="pack_qty">Pack Qty <span class="sort-arrow">↕</span></th>
+                <th style="width:88px"    onclick="sortBy('pack_cost')"  data-col="pack_cost">Pack Cost <span class="sort-arrow">↕</span></th>
+                <th style="width:82px"    onclick="sortBy('unit_cost')"  data-col="unit_cost"  class="computed">Unit Cost * <span class="sort-arrow">↕</span></th>
+                <th style="width:95px"    onclick="sortBy('markup_code')" data-col="markup_code">Markup Code <span class="sort-arrow">↕</span></th>
+                <th style="width:76px"    onclick="sortBy('markup_pct')" data-col="markup_pct" class="computed">Markup % * <span class="sort-arrow">↕</span></th>
+                <th style="width:84px"    onclick="sortBy('sell_price')" data-col="sell_price" class="computed">Sell Price * <span class="sort-arrow">↕</span></th>
+                                <th style="width:76px"    onclick="sortBy('margin_pct')" data-col="margin_pct" class="computed">Margin % * <span class="sort-arrow">↕</span></th>
+                <th style="width:130px"   onclick="sortBy('preferred_supplier')"   data-col="preferred_supplier">Pref. Supplier <span class="sort-arrow">↕</span></th>
+                <th style="width:100px"   onclick="sortBy('bin_location')"         data-col="bin_location">Bin Location <span class="sort-arrow">↕</span></th>
+                <th style="width:130px"   onclick="sortBy('supplier_part_number')" data-col="supplier_part_number">Supplier Part # <span class="sort-arrow">↕</span></th>
+                <th style="width:72px"    onclick="sortBy('is_stocked')"          data-col="is_stocked">Stocked <span class="sort-arrow">↕</span></th>
+                <th style="width:62px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="prod-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Drag handle -->
+      <div class="divider" id="divider"></div>
+
+      <!-- Markup codes pane -->
+      <div class="pane pane-bottom" id="pane-bottom">
+        <!-- Tab bar -->
+        <div class="pane-header" style="border-bottom:1px solid var(--border);margin-bottom:0;padding-bottom:0;">
+          <button class="tab-btn active" id="tab-markup" onclick="switchTab('markup')"
+            style="padding:5px 14px;font-size:11px;font-weight:600;border:none;border-bottom:2px solid var(--blue);
+                   background:none;color:var(--blue);cursor:pointer;margin-bottom:-1px;">
+            Markup Codes
+          </button>
+          <button class="tab-btn" id="tab-categories" onclick="switchTab('categories')"
+            style="padding:5px 14px;font-size:11px;font-weight:600;border:none;border-bottom:2px solid transparent;
+                   background:none;color:var(--muted);cursor:pointer;margin-bottom:-1px;">
+            Categories
+          </button>
+          <!-- Markup Codes actions -->
+          <div id="tab-actions-markup" style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+            <span style="font-size:11px;color:var(--muted)">Edit % to reprice all linked products instantly</span>
+            <button class="btn-add" onclick="openAddCode()">＋ New Code</button>
+            <button class="btn-danger" onclick="deleteSelectedCode()">✕ Delete</button>
+          </div>
+          <!-- Categories actions -->
+          <div id="tab-actions-categories" style="display:none;gap:6px;margin-left:auto;align-items:center;">
+            <button class="btn-add" onclick="openAddCategory()">＋ New Category</button>
+            <button class="btn-danger" onclick="deleteSelectedCategory()">✕ Delete</button>
+          </div>
+        </div>
+
+        <!-- Markup Codes table -->
+        <div id="tab-panel-markup" class="table-wrap" style="border-top:none;border-radius:0 0 6px 6px;">
+          <table id="mu-table">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="check-all-mu" onchange="toggleAllMu(this)"></th>
+                <th style="width:100px">Code</th>
+                <th style="width:250px">Description</th>
+                <th style="width:100px">Markup %</th>
+                <th>Products using this code</th>
+              </tr>
+            </thead>
+            <tbody id="mu-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Categories table -->
+        <div id="tab-panel-categories" class="table-wrap" style="display:none;border-top:none;border-radius:0 0 6px 6px;">
+          <table id="cat-table">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="check-all-cat" onchange="toggleAllCat(this)"></th>
+                <th style="width:220px">Category Name</th>
+                <th>Products using this category</th>
+              </tr>
+            </thead>
+            <tbody id="cat-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Add/Edit Product Modal -->
+<div class="modal-backdrop hidden" id="prod-modal">
+  <div class="modal" style="width:460px">
+    <h2 id="prod-modal-title">Add Product</h2>
+    <label>Product Name</label>
+    <input id="f-name" type="text" placeholder="Wireless Keyboard">
+    <label>SKU</label>
+    <input id="f-sku" type="text" placeholder="KB-001">
+    <label>Category</label>
+    <select id="f-category" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:7px 10px;font-size:13px;margin-bottom:12px;outline:none;width:100%;">
+      <option value="">— none —</option>
+    </select>
+    <label>Pack Qty (units per pack)</label>
+    <input id="f-pack_qty" type="number" min="0.001" step="0.001" value="1">
+    <label>Pack Cost ($)</label>
+    <input id="f-pack_cost" type="number" min="0" step="0.01" value="0">
+    <label>Markup Code</label>
+    <select id="f-markup_code"><option value="">— none —</option></select>
+    <label>Preferred Supplier</label>
+    <input id="f-preferred_supplier" type="text" placeholder="e.g. Middys, Rexel">
+    <label>Bin Location</label>
+    <input id="f-bin_location" type="text" placeholder="e.g. A-12, Shelf 3">
+    <label>Supplier Part Number</label>
+    <input id="f-supplier_part_number" type="text" placeholder="Supplier's own code">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px;">
+      <input id="f-is_stocked" type="checkbox" style="width:16px;height:16px;accent-color:var(--green);">
+      <span>Stocked item</span>
+    </label>
+    <div class="modal-actions">
+      <button onclick="closeProdModal()">Cancel</button>
+      <button class="btn-green" onclick="saveProdModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Markup Code Modal -->
+<div class="modal-backdrop hidden" id="mu-modal">
+  <div class="modal">
+    <h2>New Markup Code</h2>
+    <label>Code (short, e.g. TOOLS)</label>
+    <input id="mu-code" type="text" placeholder="TOOLS" style="text-transform:uppercase">
+    <label>Description</label>
+    <input id="mu-desc" type="text" placeholder="Power tools and hardware">
+    <label>Markup %</label>
+    <input id="mu-pct" type="number" min="0" step="0.1" value="100">
+    <div class="modal-actions">
+      <button onclick="closeMuModal()">Cancel</button>
+      <button class="btn-green" onclick="saveMuModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Mapping Modal -->
+<div class="modal-backdrop hidden" id="import-modal">
+  <div class="modal">
+    <div class="import-header">
+      <h2>Import CSV — Field Mapping</h2>
+      <p id="import-filename">No file selected</p>
+    </div>
+    <div class="import-body">
+
+      <!-- Import mode -->
+      <div class="map-section-title">Import Mode</div>
+      <div class="import-mode">
+        <div class="mode-btn active" id="mode-replace" onclick="setMode('replace')">
+          <strong>Replace All</strong>
+          <span>Delete all existing products, import CSV rows fresh</span>
+        </div>
+        <div class="mode-btn" id="mode-update" onclick="setMode('update')">
+          <strong>Update Existing</strong>
+          <span>Match by SKU — update found rows, skip unknowns</span>
+        </div>
+        <div class="mode-btn" id="mode-merge" onclick="setMode('merge')">
+          <strong>Merge</strong>
+          <span>Update matches by SKU, add new rows for unmatched</span>
+        </div>
+      </div>
+
+      <!-- Field mapping -->
+      <div class="map-section-title">Map CSV Columns → Database Fields</div>
+      <table class="map-table">
+        <thead>
+          <tr>
+            <th style="width:200px">CSV Column</th>
+            <th style="width:30px" class="map-arrow"></th>
+            <th>Maps to DB Field</th>
+            <th style="width:120px">Sample Value</th>
+          </tr>
+        </thead>
+        <tbody id="map-rows"></tbody>
+      </table>
+
+      <!-- Preview -->
+      <div class="map-section-title">Preview (first 4 rows as mapped)</div>
+      <div class="preview-wrap">
+        <table class="preview-table" id="preview-table"></table>
+      </div>
+      <p class="preview-note" id="preview-note"></p>
+    </div>
+    <div class="import-footer">
+      <span class="import-progress" id="import-progress"></span>
+      <button onclick="closeImportModal()">Cancel</button>
+      <button class="btn-green" onclick="runImport()" id="btn-run-import">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- SM8 Import Modal -->
+<div class="modal-backdrop hidden" id="sm8-modal">
+  <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+    <div class="import-header">
+      <h2>Import from SM8</h2>
+      <p id="sm8-filename">Filters: <strong>Item is Inventoried = Yes</strong> only</p>
+    </div>
+    <div class="import-body" style="flex:1;overflow-y:auto;padding:16px 22px;">
+
+      <!-- Mode -->
+      <div class="map-section-title">Import Mode</div>
+      <div class="import-mode">
+        <div class="mode-btn active" id="sm8-mode-replace" onclick="setSM8Mode('replace')">
+          <strong>Replace All</strong>
+          <span>Clear existing products, load SM8 items fresh</span>
+        </div>
+        <div class="mode-btn" id="sm8-mode-update" onclick="setSM8Mode('update')">
+          <strong>Update Existing</strong>
+          <span>Match by SKU — update cost &amp; price, skip new items</span>
+        </div>
+        <div class="mode-btn" id="sm8-mode-merge" onclick="setSM8Mode('merge')">
+          <strong>Merge</strong>
+          <span>Update matches by SKU, add any new items</span>
+        </div>
+      </div>
+
+      <!-- Default markup code -->
+      <div class="map-section-title">Default Markup Code for new items</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+        <select id="sm8-markup-select" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;width:280px;outline:none;">
+          <option value="">— none (set manually later) —</option>
+        </select>
+        <span style="font-size:11px;color:var(--muted)">Sell price will auto-calculate from this</span>
+      </div>
+
+      <!-- Field mapping (fixed for SM8) -->
+      <div class="map-section-title">SM8 Field Mapping (fixed)</div>
+      <table class="map-table" style="margin-bottom:16px;">
+        <thead><tr><th>SM8 Column</th><th style="width:30px"></th><th>DB Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><span class="csv-col-name">Item Number</span></td><td class="map-arrow">→</td><td style="color:var(--green)">SKU</td><td style="color:var(--muted);font-size:11px">Used to match existing products</td></tr>
+          <tr><td><span class="csv-col-name">Name</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Name</td><td style="color:var(--muted);font-size:11px">New &amp; existing items</td></tr>
+          <tr><td><span class="csv-col-name">Purchase Cost</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px">Use Middys / Voltex / Actrol for pricing</td></tr>
+          <tr><td><span class="csv-col-name">Price</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px">Sell price comes from markup code</td></tr>
+          <tr><td><span class="csv-col-name">Quantity In Stock</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px"><strong style="color:var(--amber)">Pack qty is never changed by SM8</strong></td></tr>
+          <tr><td><span class="csv-col-name">Item is Inventoried</span></td><td class="map-arrow">→</td><td style="color:var(--amber)">filter + is_stocked</td><td style="color:var(--muted);font-size:11px">Only Yes rows imported · sets Stocked = true</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Preview -->
+      <div class="map-section-title">Preview — Inventoried items only (first 5)</div>
+      <div class="preview-wrap">
+        <table class="preview-table" id="sm8-preview-table"></table>
+      </div>
+      <p class="preview-note" id="sm8-preview-note"></p>
+    </div>
+    <div class="import-footer">
+      <span class="import-progress" id="sm8-progress"></span>
+      <button onclick="closeSM8Modal()">Cancel</button>
+      <button class="btn-green" id="btn-run-sm8" onclick="runSM8Import()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Voltex Import Modal -->
+<div class="modal-backdrop hidden" id="voltex-modal">
+  <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+    <div class="import-header">
+      <h2>Import Voltex Price File</h2>
+      <p id="voltex-filename">Matches on <strong>Item Number</strong> (SKU) — will not overwrite existing descriptions</p>
+    </div>
+    <div class="import-body" style="flex:1;overflow-y:auto;padding:16px 22px;">
+
+      <!-- Summary badges -->
+      <div id="voltex-summary" style="display:none;margin-bottom:16px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div style="padding:8px 14px;background:#14352a;border:1px solid #22c55e;border-radius:6px;font-size:12px;">
+            <div style="color:var(--green);font-size:18px;font-weight:700;" id="voltex-count-new">0</div>
+            <div style="color:var(--muted);">New items to add</div>
+          </div>
+          <div style="padding:8px 14px;background:#1a2d3d;border:1px solid var(--blue);border-radius:6px;font-size:12px;">
+            <div style="color:var(--blue);font-size:18px;font-weight:700;" id="voltex-count-update">0</div>
+            <div style="color:var(--muted);">Existing items — cost update only</div>
+          </div>
+          <div style="padding:8px 14px;background:#1e2433;border:1px solid var(--border);border-radius:6px;font-size:12px;">
+            <div style="color:var(--subtle);font-size:18px;font-weight:700;" id="voltex-count-total">0</div>
+            <div style="color:var(--muted);">Total rows in file</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fixed field mapping -->
+      <div class="map-section-title">Field Mapping (fixed)</div>
+      <table class="map-table" style="margin-bottom:16px;">
+        <thead><tr><th>Voltex Column</th><th style="width:30px"></th><th>DB Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><span class="csv-col-name">Item Number</span></td><td class="map-arrow">→</td><td style="color:var(--green)">SKU + Supplier Part #</td><td style="color:var(--muted);font-size:11px">Used to match existing products</td></tr>
+          <tr><td><span class="csv-col-name">Name</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Name</td><td style="color:var(--muted);font-size:11px"><strong style="color:var(--amber)">New items only</strong> — existing descriptions are never overwritten</td></tr>
+          <tr><td><span class="csv-col-name">Purchase Cost</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Pack Cost</td><td style="color:var(--muted);font-size:11px">Updated on all matched &amp; new items</td></tr>
+          <tr><td><span class="csv-col-name">(auto)</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Preferred Supplier</td><td style="color:var(--muted);font-size:11px">Set to "Voltex" on new items</td></tr>
+          <tr><td><span class="csv-col-name">Price</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px">Sell price comes from markup code</td></tr>
+          <tr><td><span class="csv-col-name">Quantity In Stock</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px"></td></tr>
+        </tbody>
+      </table>
+
+      <!-- Default markup for new items -->
+      <div class="map-section-title">Default Markup Code for new items</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+        <select id="voltex-markup-select" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;width:300px;outline:none;">
+          <option value="">— none (assign manually later) —</option>
+        </select>
+        <span style="font-size:11px;color:var(--muted)">Applied to new items only</span>
+      </div>
+
+      <!-- Options for existing items -->
+      <div class="map-section-title">Options for existing matched items</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;">
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="voltex-update-supplier" checked
+            style="width:15px;height:15px;accent-color:var(--violet);cursor:pointer;">
+          <span>Update <strong style="color:var(--violet)">Preferred Supplier</strong> → <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;">Voltex</code> on matched items</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="voltex-update-partno" checked
+            style="width:15px;height:15px;accent-color:var(--violet);cursor:pointer;">
+          <span>Update <strong style="color:var(--violet)">Supplier Part #</strong> from Item Number on matched items</span>
+        </label>
+      </div>
+
+      <!-- New items preview -->
+      <div id="voltex-new-section" style="display:none;">
+        <div class="map-section-title">New items (will be created)</div>
+        <div class="preview-wrap" style="margin-bottom:12px;">
+          <table class="preview-table" id="voltex-new-table"></table>
+        </div>
+      </div>
+
+      <!-- Updated items preview -->
+      <div id="voltex-update-section" style="display:none;">
+        <div class="map-section-title">Existing items — pack cost will be updated (name preserved)</div>
+        <div class="preview-wrap" style="margin-bottom:4px;">
+          <table class="preview-table" id="voltex-update-table"></table>
+        </div>
+        <p class="preview-note" id="voltex-update-note"></p>
+      </div>
+
+    </div>
+    <div class="import-footer">
+      <span class="import-progress" id="voltex-progress"></span>
+      <button onclick="closeVoltexModal()">Cancel</button>
+      <button class="btn-green" id="btn-run-voltex" onclick="runVoltexImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings backdrop -->
+<div id="settings-backdrop" onclick="closeSettings()"></div>
+
+<!-- Settings panel -->
+<div id="settings-panel">
+  <div class="settings-header">
+    <h2>⚙ Settings</h2>
+    <button class="settings-close" onclick="closeSettings()">✕</button>
+  </div>
+  <div class="settings-body">
+
+    <div class="settings-section-title">Defaults for New Items</div>
+
+    <div class="settings-row">
+      <label>Default Markup Code</label>
+      <select id="setting-default-markup">
+        <option value="">— none —</option>
+      </select>
+      <p class="hint">Pre-filled when adding products via Middys import, SM8 import, or the Add Product form. Can always be overridden per item.</p>
+    </div>
+
+  </div>
+  <div class="settings-footer">
+    <button onclick="closeSettings()">Cancel</button>
+    <button class="btn-green" onclick="saveSettings()">Save Settings</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="csv-input"  accept=".csv" onchange="handleCSV(event)">
+<input type="file" id="sm8-input"     accept=".csv" onchange="handleSM8(event)">
+<input type="file" id="middys-input"  accept=".csv" onchange="handleMiddys(event)">
+<input type="file" id="voltex-input"   accept=".csv" onchange="handleVoltex(event)">
+<input type="file" id="actrol-input"    accept=".csv" onchange="handleActrol(event)">
+<input type="file" id="restore-input"  accept=".db"  onchange="handleRestore(event)">
+
+<!-- Actrol Import Modal -->
+<div class="modal-backdrop hidden" id="actrol-modal">
+  <div class="modal" style="width:720px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+    <div class="import-header">
+      <h2>Import Actrol Price File</h2>
+      <p id="actrol-filename">No header row — fixed column positions used</p>
+    </div>
+    <div class="import-body" style="flex:1;overflow-y:auto;padding:16px 22px;">
+
+      <!-- Summary badges -->
+      <div id="actrol-summary" style="display:none;margin-bottom:16px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div style="padding:8px 14px;background:#14352a;border:1px solid #22c55e;border-radius:6px;font-size:12px;">
+            <div style="color:var(--green);font-size:18px;font-weight:700;" id="actrol-count-new">0</div>
+            <div style="color:var(--muted);">New items to add</div>
+          </div>
+          <div style="padding:8px 14px;background:#1a2d3d;border:1px solid var(--blue);border-radius:6px;font-size:12px;">
+            <div style="color:var(--blue);font-size:18px;font-weight:700;" id="actrol-count-update">0</div>
+            <div style="color:var(--muted);">Existing items to update (cost only)</div>
+          </div>
+          <div style="padding:8px 14px;background:#1e2433;border:1px solid var(--border);border-radius:6px;font-size:12px;">
+            <div style="color:var(--subtle);font-size:18px;font-weight:700;" id="actrol-count-total">0</div>
+            <div style="color:var(--muted);">Total rows in file</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fixed field mapping -->
+      <div class="map-section-title">Field Mapping (fixed — no header row in Actrol file)</div>
+      <table class="map-table" style="margin-bottom:16px;">
+        <thead><tr><th>Actrol Column</th><th style="width:30px"></th><th>DB Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><span class="csv-col-name">col 3 (Item Number)</span></td><td class="map-arrow">→</td><td style="color:var(--green)">SKU + Supplier Part #</td><td style="color:var(--muted);font-size:11px">Match key for existing items</td></tr>
+          <tr><td><span class="csv-col-name">col 4 (Description)</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Name</td><td style="color:var(--muted);font-size:11px"><strong style="color:var(--amber)">New items only</strong> — existing names never overwritten</td></tr>
+          <tr><td><span class="csv-col-name">col 6 (Price 1 / Trade)</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Pack Cost</td><td style="color:var(--muted);font-size:11px">Lowest price level — updated on all matched &amp; new items</td></tr>
+          <tr><td><span class="csv-col-name">(auto)</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Preferred Supplier</td><td style="color:var(--muted);font-size:11px">Set to "Actrol" on new items</td></tr>
+          <tr><td><span class="csv-col-name">col 7–9 (other prices)</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px">Sell price comes from markup code</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Default markup for new items -->
+      <div class="map-section-title">Default Markup Code for new items</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+        <select id="actrol-markup-select" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;width:300px;outline:none;">
+          <option value="">— none (assign manually later) —</option>
+        </select>
+        <span style="font-size:11px;color:var(--muted)">Applied to new items only</span>
+      </div>
+
+      <!-- Options for existing items -->
+      <div class="map-section-title">Options for existing matched items</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;">
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="actrol-update-supplier" checked
+            style="width:15px;height:15px;accent-color:var(--orange);cursor:pointer;">
+          <span>Update <strong style="color:var(--orange)">Preferred Supplier</strong> → <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;">Actrol</code> on matched items</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="actrol-update-partno" checked
+            style="width:15px;height:15px;accent-color:var(--orange);cursor:pointer;">
+          <span>Update <strong style="color:var(--orange)">Supplier Part #</strong> from Item Number on matched items</span>
+        </label>
+      </div>
+
+      <!-- Preview new items -->
+      <div id="actrol-new-section" style="display:none;">
+        <div class="map-section-title">New items (will be created)</div>
+        <div class="preview-wrap" style="margin-bottom:12px;">
+          <table class="preview-table" id="actrol-new-table"></table>
+        </div>
+      </div>
+
+      <!-- Preview updated items -->
+      <div id="actrol-update-section" style="display:none;">
+        <div class="map-section-title">Existing items (pack cost updated · name preserved)</div>
+        <div class="preview-wrap" style="margin-bottom:4px;">
+          <table class="preview-table" id="actrol-update-table"></table>
+        </div>
+        <p class="preview-note" id="actrol-update-note"></p>
+      </div>
+
+    </div>
+    <div class="import-footer">
+      <span class="import-progress" id="actrol-progress"></span>
+      <button onclick="closeActrolModal()">Cancel</button>
+      <button class="btn-green" id="btn-run-actrol" onclick="runActrolImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Middys Import Modal -->
+<div class="modal-backdrop hidden" id="middys-modal">
+  <div class="modal" style="width:720px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+    <div class="import-header">
+      <h2>Import Middys Price File</h2>
+      <p id="middys-filename">Uses <strong>New Product Code</strong> as SKU to match existing items</p>
+    </div>
+    <div class="import-body" style="flex:1;overflow-y:auto;padding:16px 22px;">
+
+      <!-- Summary badges shown after parse -->
+      <div id="middys-summary" style="display:none;margin-bottom:16px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <div style="padding:8px 14px;background:#14352a;border:1px solid #22c55e;border-radius:6px;font-size:12px;">
+            <div style="color:var(--green);font-size:18px;font-weight:700;" id="middys-count-new">0</div>
+            <div style="color:var(--muted);">New items to add</div>
+          </div>
+          <div style="padding:8px 14px;background:#1a2d3d;border:1px solid var(--blue);border-radius:6px;font-size:12px;">
+            <div style="color:var(--blue);font-size:18px;font-weight:700;" id="middys-count-update">0</div>
+            <div style="color:var(--muted);">Existing items to update (cost only)</div>
+          </div>
+          <div style="padding:8px 14px;background:#1e2433;border:1px solid var(--border);border-radius:6px;font-size:12px;">
+            <div style="color:var(--subtle);font-size:18px;font-weight:700;" id="middys-count-total">0</div>
+            <div style="color:var(--muted);">Total rows in file</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Field mapping (fixed) -->
+      <div class="map-section-title">Field Mapping (fixed)</div>
+      <table class="map-table" style="margin-bottom:16px;">
+        <thead><tr><th>Middys Column</th><th style="width:30px"></th><th>DB Field</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><span class="csv-col-name">New Product Code</span></td><td class="map-arrow">→</td><td style="color:var(--green)">SKU + Supplier Part #</td><td style="color:var(--muted);font-size:11px">Used to match existing; also stored as Supplier Part Number on new items</td></tr>
+          <tr><td><span class="csv-col-name">Description</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Name</td><td style="color:var(--muted);font-size:11px">New items only</td></tr>
+          <tr><td><span class="csv-col-name">Purchases Unit Price</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Pack Cost</td><td style="color:var(--muted);font-size:11px">Updated on all matched &amp; new items</td></tr>
+          <tr><td><span class="csv-col-name">(auto)</span></td><td class="map-arrow">→</td><td style="color:var(--green)">Preferred Supplier</td><td style="color:var(--muted);font-size:11px">Set to "Middys" on new items</td></tr>
+          <tr><td><span class="csv-col-name">Sales Unit Price</span></td><td class="map-arrow">→</td><td style="color:var(--muted)">ignored</td><td style="color:var(--muted);font-size:11px">Sell price comes from markup code</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Default markup for new items -->
+      <div class="map-section-title">Default Markup Code for new items</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+        <select id="middys-markup-select" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;width:300px;outline:none;">
+          <option value="">— none (assign manually later) —</option>
+        </select>
+        <span style="font-size:11px;color:var(--muted)">Applied to new items only</span>
+      </div>
+
+      <!-- Options for existing items -->
+      <div class="map-section-title">Options for existing matched items</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;">
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="middys-update-supplier" checked
+            style="width:15px;height:15px;accent-color:var(--blue);cursor:pointer;">
+          <span>Update <strong style="color:var(--blue)">Preferred Supplier</strong> → <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;">Middys</code> on matched items</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;color:var(--text);">
+          <input type="checkbox" id="middys-update-partno" checked
+            style="width:15px;height:15px;accent-color:var(--blue);cursor:pointer;">
+          <span>Update <strong style="color:var(--blue)">Supplier Part #</strong> from New Product Code on matched items</span>
+        </label>
+      </div>
+
+      <!-- Preview of NEW items -->
+      <div id="middys-new-section" style="display:none;">
+        <div class="map-section-title">New items (will be created)</div>
+        <div class="preview-wrap" style="margin-bottom:12px;">
+          <table class="preview-table" id="middys-new-table"></table>
+        </div>
+      </div>
+
+      <!-- Preview of UPDATED items -->
+      <div id="middys-update-section" style="display:none;">
+        <div class="map-section-title">Existing items (pack cost will be updated)</div>
+        <div class="preview-wrap" style="margin-bottom:4px;">
+          <table class="preview-table" id="middys-update-table"></table>
+        </div>
+        <p class="preview-note" id="middys-update-note"></p>
+      </div>
+
+    </div>
+    <div class="import-footer">
+      <span class="import-progress" id="middys-progress"></span>
+      <button onclick="closeMiddysModal()">Cancel</button>
+      <button class="btn-green" id="btn-run-middys" onclick="runMiddysImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Voltex Import Modal -->
+
+
+<script>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let products    = [];
+let markupCodes = [];
+let categories  = [];
+let settings    = { default_markup_code: '' };
+let selected    = new Set();   // product ids
+let selectedMu  = new Set();   // markup codes
+let sortCol     = 'id';
+let sortAsc     = true;
+let editingCell = null;        // { pid, field, el }
+let editProdId  = null;        // null = add, number = edit
+
+// Sort cache — busted whenever products array changes
+let _sortedProducts = null;
+let _sortKey        = '';   // tracks "sortCol+sortAsc" to detect direction changes
+function _bustSort() { _sortedProducts = null; }
+
+// ══════════════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════════════
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch('/api' + path, opts);
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
+
+const getProducts    = ()     => api('GET',    '/products');
+const getMarkups     = ()     => api('GET',    '/markup-codes');
+const getCategories  = ()     => api('GET',    '/categories');
+const getSettings    = ()     => api('GET',    '/settings');
+const putSettings    = body   => api('PUT',    '/settings', body);
+const recalcAPI      = ()     => api('POST',   '/products/recalculate');
+const postProduct    = body   => api('POST',   '/products', body);
+const patchProduct   = (id,b) => api('PATCH',  `/products/${id}`, b);
+const deleteProduct  = id     => api('DELETE', `/products/${id}`);
+const postMarkup     = body   => api('POST',   '/markup-codes', body);
+const patchMarkup    = (c,b)  => api('PATCH',  `/markup-codes/${c}`, b);
+const deleteMarkup   = c      => api('DELETE', `/markup-codes/${c}`);
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+async function init() {
+  try {
+    [products, markupCodes, categories, settings] = await Promise.all([
+      getProducts(), getMarkups(), getCategories(), getSettings()
+    ]);
+    initTableDelegation();
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+  } catch(e) { toast('Failed to load data: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════
+//  RENDER PRODUCTS
+// ══════════════════════════════════════════════
+// ── Debounced search ─────────────────────────
+let _filterTimer = null;
+function applyFilter() {
+  clearTimeout(_filterTimer);
+  _filterTimer = setTimeout(() => renderProducts(), 120);
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = true; }
+  _bustSort();
+  document.querySelectorAll('#prod-table thead th').forEach(th => {
+    th.classList.remove('sorted');
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = '↕';
+  });
+  const th = document.querySelector(`#prod-table thead th[data-col="${col}"]`);
+  if (th) {
+    th.classList.add('sorted');
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = sortAsc ? '↑' : '↓';
+  }
+  renderProducts();
+}
+
+// Cache sorted products — only re-sort when data or sort col/dir changes
+function getSorted() {
+  const key = sortCol + (sortAsc ? '+' : '-');
+  if (_sortedProducts && _sortKey === key) return _sortedProducts;
+  const arr = [...products];
+  arr.sort((a, b) => {
+    let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+    if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
+    return sortAsc
+      ? String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' })
+      : String(vb).localeCompare(String(va), undefined, { sensitivity: 'base' });
+  });
+  _sortedProducts = arr;
+  _sortKey        = key;
+  return arr;
+}
+
+function getFiltered() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const sorted = getSorted();
+  if (!q) return sorted;
+  return sorted.filter(p =>
+    (p.name        && p.name.toLowerCase().includes(q)) ||
+    (p.sku         && p.sku.toLowerCase().includes(q))  ||
+    (p.category    && p.category.toLowerCase().includes(q)) ||
+    (p.markup_code && p.markup_code.toLowerCase().includes(q)) ||
+    (p.bin_location         && p.bin_location.toLowerCase().includes(q)) ||
+    (p.preferred_supplier   && p.preferred_supplier.toLowerCase().includes(q)) ||
+    (p.supplier_part_number && p.supplier_part_number.toLowerCase().includes(q))
+  );
+}
+
+function renderProducts() {
+  const tbody = document.getElementById('prod-body');
+  const rows  = getFiltered();
+  if (!rows.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="14">No products yet — import a CSV or click ＋ Add Product</td></tr>`;
+    updateDeleteBtn();
+    return;
+  }
+  // Build HTML string and set once — single DOM write
+  const html = rows.map(p => productRow(p)).join('');
+  tbody.innerHTML = html;
+  updateDeleteBtn();
+  // Event listeners are handled by delegation (see initTableDelegation)
+}
+
+function marginClass(p) {
+  if (p.margin < 0) return 'col-margin-neg';
+  if (p.margin_pct < 15) return 'col-margin-warn';
+  return 'col-margin-pos';
+}
+
+function productRow(p) {
+  const mc = marginClass(p);
+  return `<tr id="row-${p.id}" class="${selected.has(p.id)?'selected':''}">
+    <td class="editable"><div class="cell-display" data-pid="${p.id}" data-field="name">${esc(p.name||'')}</div></td>
+    <td class="editable"><div class="cell-display" data-pid="${p.id}" data-field="sku">${esc(p.sku||'')}</div></td>
+    <td class="editable select-cell"><div class="cell-display" data-pid="${p.id}" data-field="category">${esc(p.category||'—')}</div></td>
+    <td class="editable" style="text-align:right"><div class="cell-display" data-pid="${p.id}" data-field="pack_qty" style="text-align:right">${parseFloat(p.pack_qty||1) % 1 === 0 ? parseFloat(p.pack_qty||1).toFixed(0) : parseFloat(p.pack_qty||1)}</div></td>
+    <td class="editable" style="text-align:right"><div class="cell-display col-cost" data-pid="${p.id}" data-field="pack_cost" style="text-align:right">$${fmt(p.pack_cost)}</div></td>
+    <td class="computed" style="text-align:right"><div class="cell-display col-unit" style="text-align:right">$${fmt(p.unit_cost)}</div></td>
+    <td class="editable select-cell"><div class="cell-display col-code" data-pid="${p.id}" data-field="markup_code">${esc(p.markup_code||'—')}</div></td>
+    <td class="computed" style="text-align:right"><div class="cell-display col-mpct" style="text-align:right">${p.markup_pct != null ? p.markup_pct.toFixed(1)+'%' : ''}</div></td>
+    <td class="computed" style="text-align:right"><div class="cell-display col-sell" style="text-align:right">$${fmt(p.sell_price)}</div></td>
+    <td class="computed" style="text-align:right"><div class="cell-display ${mc}" style="text-align:right">${p.margin_pct != null ? p.margin_pct.toFixed(1)+'%' : ''}</div></td>
+    <td class="editable"><div class="cell-display" data-pid="${p.id}" data-field="preferred_supplier">${esc(p.preferred_supplier||'')}</div></td>
+    <td class="editable"><div class="cell-display" data-pid="${p.id}" data-field="bin_location">${esc(p.bin_location||'')}</div></td>
+    <td class="editable"><div class="cell-display" data-pid="${p.id}" data-field="supplier_part_number">${esc(p.supplier_part_number||'')}</div></td>
+    <td style="text-align:center"><div class="cell-display" style="padding:5px;text-align:center">
+      <input type="checkbox" class="stocked-toggle" data-pid="${p.id}" ${p.is_stocked ? 'checked' : ''}
+        title="${p.is_stocked ? 'In stock' : 'Not stocked'}"
+        style="width:16px;height:16px;cursor:pointer;accent-color:var(--green);">
+    </div></td>
+    <td><div class="cell-display" style="text-align:center">
+      <button style="padding:2px 7px;font-size:11px" class="btn-danger" onclick="deleteOne(${p.id})">✕</button>
+    </div></td>
+  </tr>`;
+}
+
+// ══════════════════════════════════════════════
+//  INLINE EDITING
+// ══════════════════════════════════════════════
+function startEdit(displayEl) {
+  if (editingCell) commitEdit();
+  const pid   = +displayEl.dataset.pid;
+  const field = displayEl.dataset.field;
+  const prod  = products.find(p => p.id === pid);
+  if (!prod) return;
+
+  const raw = prod[field] != null ? String(prod[field]) : '';
+  const td  = displayEl.parentElement;
+
+  // ── Markup code or Category → inline <select> ──────────────────
+  if (field === 'markup_code' || field === 'category') {
+    const sel = document.createElement('select');
+    sel.className = 'cell-select';
+
+    if (field === 'markup_code') {
+      sel.innerHTML =
+        `<option value="">— none —</option>` +
+        markupCodes.map(m =>
+          `<option value="${esc(m.code)}" ${m.code === raw ? 'selected' : ''}>${esc(m.code)}  (${m.markup_pct}%)</option>`
+        ).join('');
+    } else {
+      sel.innerHTML =
+        `<option value="">— none —</option>` +
+        categories.map(c =>
+          `<option value="${esc(c)}" ${c === raw ? 'selected' : ''}>${esc(c)}</option>`
+        ).join('');
+    }
+
+    td.innerHTML = '';
+    td.appendChild(sel);
+    sel.focus();
+
+    editingCell = { pid, field, td, input: sel };
+
+    // Commit on selection change — no blur handler needed (avoids race condition)
+    sel.addEventListener('change', () => commitEdit());
+    sel.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+      if (e.key === 'Enter')  { e.preventDefault(); commitEdit(); }
+    });
+    // Only cancel (don't commit) on blur — user may have clicked elsewhere without selecting
+    sel.addEventListener('blur', () => {
+      // Give change event a chance to fire first if user clicked an option
+      setTimeout(() => { if (editingCell?.field === 'markup_code') cancelEdit(); }, 150);
+    });
+    return;
+  }
+
+  // ── All other fields → <input> ──────────────────────
+  const input = document.createElement('input');
+  input.className = 'cell-input';
+  input.value = raw;
+  if (field === 'pack_qty')  { input.type = 'number'; input.min = '0.001'; input.step = '0.001'; }
+  if (field === 'pack_cost') { input.type = 'number'; input.min = '0'; input.step = '0.0001'; }
+
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  editingCell = { pid, field, td, input };
+
+  input.addEventListener('blur',    commitEdit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); commitEdit(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+  });
+}
+
+async function commitEdit() {
+  if (!editingCell) return;
+  const { pid, field, td, input } = editingCell;
+  editingCell = null;
+  const value = input.value.trim();
+
+  try {
+    let body = {};
+    if (field === 'pack_qty')       body[field] = Math.max(0.001, parseFloat(value) || 1);
+    else if (field === 'pack_cost') body[field] = parseFloat(value) || 0;
+    else if (field === 'markup_code') body[field] = value.toUpperCase() || null;
+    else if (field === 'category')    body[field] = value || null;
+    else body[field] = value;
+
+    const updated = await patchProduct(pid, body);
+    const idx = products.findIndex(p => p.id === pid);
+    if (idx !== -1) products[idx] = updated;
+    _bustSort();
+
+    // Surgical update — replace just this row, not the whole table
+    const row = document.getElementById(`row-${pid}`);
+    if (row) {
+      const newRow = document.createElement('tr');
+      newRow.id        = `row-${pid}`;
+      newRow.className = row.className;
+      newRow.innerHTML = productRow(updated).replace(/^<tr[^>]*>/, '').replace(/<\/tr>$/, '');
+      row.replaceWith(newRow);
+    } else {
+      // Row not visible (filtered out) — no DOM update needed
+    }
+    setSaved();
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'error');
+    // On error restore the display cell
+    const row = document.getElementById(`row-${pid}`);
+    if (row) {
+      const prod = products.find(p => p.id === pid);
+      if (prod) {
+        const newRow = document.createElement('tr');
+        newRow.id        = `row-${pid}`;
+        newRow.className = row.className;
+        newRow.innerHTML = productRow(prod).replace(/^<tr[^>]*>/, '').replace(/<\/tr>$/, '');
+        row.replaceWith(newRow);
+      }
+    }
+  }
+}
+
+function cancelEdit() {
+  if (!editingCell) return;
+  const { pid } = editingCell;
+  editingCell = null;
+  // Restore just the affected row
+  const row  = document.getElementById(`row-${pid}`);
+  const prod = products.find(p => p.id === pid);
+  if (row && prod) {
+    const newRow = document.createElement('tr');
+    newRow.id        = `row-${pid}`;
+    newRow.className = row.className;
+    newRow.innerHTML = productRow(prod).replace(/^<tr[^>]*>/, '').replace(/<\/tr>$/, '');
+    row.replaceWith(newRow);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  SELECTION
+// ══════════════════════════════════════════════
+function toggleSelect(id, checked) {
+  if (checked) selected.add(id); else selected.delete(id);
+  const row = document.getElementById(`row-${id}`);
+  if (row) row.classList.toggle('selected', checked);
+  updateDeleteBtn();
+}
+function toggleAllMu(cb) {
+  markupCodes.forEach(m => {
+    if (cb.checked) selectedMu.add(m.code); else selectedMu.delete(m.code);
+  });
+  renderMarkupCodes();
+  renderCategories();
+}
+function updateDeleteBtn() {
+  document.getElementById('btn-delete').disabled = selected.size === 0;
+}
+
+// ══════════════════════════════════════════════
+//  RENDER MARKUP CODES
+// ══════════════════════════════════════════════
+function renderMarkupCodes() {
+  const tbody = document.getElementById('mu-body');
+  if (!markupCodes.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">No markup codes — click ＋ New Code</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = markupCodes.map(m => {
+    const count = products.filter(p => p.markup_code === m.code).length;
+    const ck = selectedMu.has(m.code) ? 'checked' : '';
+    return `<tr id="mu-row-${m.code}" class="${selectedMu.has(m.code)?'selected':''}">
+      <td><div class="cell-display" style="padding:7px;text-align:center">
+        <input type="checkbox" data-code="${esc(m.code)}" ${ck}
+          onchange="toggleSelectMu('${esc(m.code)}', this.checked)"></div></td>
+      <td class="editable"><div class="cell-display col-code" data-code="${esc(m.code)}" data-field="code">${esc(m.code)}</div></td>
+      <td class="editable"><div class="cell-display" data-code="${esc(m.code)}" data-field="description">${esc(m.description||'')}</div></td>
+      <td class="editable" style="text-align:right">
+        <div class="cell-display col-teal" data-code="${esc(m.code)}" data-field="markup_pct" style="text-align:right;color:var(--teal)">
+          ${m.markup_pct.toFixed(2)}%</div></td>
+      <td><div class="cell-display" style="color:var(--muted)">${count} product${count!==1?'s':''}</div></td>
+    </tr>`;
+  }).join('');
+
+  // Attach inline edit to markup cells
+  tbody.querySelectorAll('td.editable .cell-display[data-code]').forEach(el => {
+    el.addEventListener('dblclick', () => startMuEdit(el));
+  });
+}
+
+function toggleSelectMu(code, checked) {
+  if (checked) selectedMu.add(code); else selectedMu.delete(code);
+  const row = document.getElementById(`mu-row-${code}`);
+  if (row) row.classList.toggle('selected', checked);
+}
+
+// ── Inline edit for markup codes ──
+let editingMuCell = null;
+
+function startMuEdit(displayEl) {
+  if (editingMuCell) commitMuEdit();
+  const code  = displayEl.dataset.code;
+  const field = displayEl.dataset.field;
+  const mu    = markupCodes.find(m => m.code === code);
+  if (!mu) return;
+
+  const raw   = mu[field] != null ? String(mu[field]) : '';
+  const td    = displayEl.parentElement;
+  const input = document.createElement('input');
+  input.className = 'cell-input';
+  input.value = raw;
+  if (field === 'markup_pct') { input.type = 'number'; input.min = '0'; input.step = '0.01'; }
+
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus(); input.select();
+
+  editingMuCell = { code, field, td, input };
+  input.addEventListener('blur',    commitMuEdit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); commitMuEdit(); }
+    if (e.key === 'Escape') { e.preventDefault(); editingMuCell = null; renderMarkupCodes(); }
+  });
+}
+
+async function commitMuEdit() {
+  if (!editingMuCell) return;
+  const { code, field, input } = editingMuCell;
+  editingMuCell = null;
+  const value = input.value.trim();
+  try {
+    let body = {};
+    if (field === 'markup_pct') body.markup_pct = parseFloat(value) || 0;
+    else body[field] = value;
+
+    await patchMarkup(code, body);
+    // Reload everything — markup change reprices all products
+    [products, markupCodes] = await Promise.all([getProducts(), getMarkups()]);
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    setSaved();
+    toast('✓ Markup updated — prices recalculated', 'success');
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'error');
+    renderMarkupCodes();
+    renderCategories();
+  }
+}
+
+// ══════════════════════════════════════════════
+//  ADD / EDIT PRODUCT MODAL
+// ══════════════════════════════════════════════
+function openAddProduct() {
+  editProdId = null;
+  document.getElementById('prod-modal-title').textContent = 'Add Product';
+  document.getElementById('f-name').value                = '';
+  document.getElementById('f-sku').value                 = '';
+  document.getElementById('f-category').value            = '';
+  document.getElementById('f-pack_qty').value            = 1;
+  document.getElementById('f-pack_cost').value           = 0;
+  document.getElementById('f-preferred_supplier').value  = '';
+  document.getElementById('f-bin_location').value        = '';
+  document.getElementById('f-supplier_part_number').value= '';
+  document.getElementById('f-is_stocked').checked        = false;
+  populateMarkupSelect(defaultMarkup());
+  populateCategorySelect('');
+  document.getElementById('prod-modal').classList.remove('hidden');
+  document.getElementById('f-name').focus();
+}
+
+function populateMarkupSelect(selected) {
+  const sel = document.getElementById('f-markup_code');
+  sel.innerHTML = '<option value="">— none —</option>' +
+    markupCodes.map(m =>
+      `<option value="${esc(m.code)}" ${m.code===selected?'selected':''}>${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)</option>`
+    ).join('');
+}
+
+function closeProdModal() {
+  document.getElementById('prod-modal').classList.add('hidden');
+}
+
+async function saveProdModal() {
+  const body = {
+    name:                 document.getElementById('f-name').value.trim(),
+    sku:                  document.getElementById('f-sku').value.trim(),
+    category:             document.getElementById('f-category').value || null,
+    pack_qty:             Math.max(0.001, parseFloat(document.getElementById('f-pack_qty').value)||1),
+    pack_cost:            parseFloat(document.getElementById('f-pack_cost').value)||0,
+    markup_code:          document.getElementById('f-markup_code').value || null,
+    preferred_supplier:   document.getElementById('f-preferred_supplier').value.trim() || null,
+    bin_location:         document.getElementById('f-bin_location').value.trim() || null,
+    supplier_part_number: document.getElementById('f-supplier_part_number').value.trim() || null,
+    is_stocked:           document.getElementById('f-is_stocked').checked,
+  };
+  try {
+    if (editProdId) {
+      const updated = await patchProduct(editProdId, body);
+      const idx = products.findIndex(p => p.id === editProdId);
+      if (idx !== -1) products[idx] = updated;
+    } else {
+      const created = await postProduct(body);
+      products.push(created);
+    }
+    closeProdModal();
+    renderProducts();
+    updateStats();
+    setSaved();
+    toast(editProdId ? '✓ Product updated' : '✓ Product added', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════
+//  ADD MARKUP CODE MODAL
+// ══════════════════════════════════════════════
+function openAddCode() {
+  document.getElementById('mu-code').value = '';
+  document.getElementById('mu-desc').value = '';
+  document.getElementById('mu-pct').value  = 100;
+  document.getElementById('mu-modal').classList.remove('hidden');
+  document.getElementById('mu-code').focus();
+}
+function closeMuModal() {
+  document.getElementById('mu-modal').classList.add('hidden');
+}
+async function saveMuModal() {
+  const code = document.getElementById('mu-code').value.trim().toUpperCase();
+  if (!code) { toast('Code is required', 'error'); return; }
+  try {
+    const mu = await postMarkup({
+      code,
+      description: document.getElementById('mu-desc').value.trim(),
+      markup_pct:  parseFloat(document.getElementById('mu-pct').value) || 100,
+    });
+    markupCodes.push(mu);
+    markupCodes.sort((a,b) => a.code.localeCompare(b.code));
+    closeMuModal();
+    renderMarkupCodes();
+    renderCategories();
+    toast(`✓ Code '${code}' added`, 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════
+//  DELETE
+// ══════════════════════════════════════════════
+async function deleteOne(id) {
+  if (!confirm('Delete this product?')) return;
+  try {
+    await deleteProduct(id);
+    products = products.filter(p => p.id !== id);
+    _bustSort();
+    selected.delete(id);
+    renderProducts();
+    updateStats();
+    toast('✓ Deleted', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteSelected() {
+  if (!selected.size) return;
+  if (!confirm(`Delete ${selected.size} product(s)?`)) return;
+  try {
+    await Promise.all([...selected].map(id => deleteProduct(id)));
+    products = products.filter(p => !selected.has(p.id));
+    _bustSort();
+    selected.clear();
+    renderProducts();
+    updateStats();
+    toast(`✓ Deleted`, 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteSelectedCode() {
+  if (!selectedMu.size) { toast('Select a code first', 'error'); return; }
+  const codes = [...selectedMu];
+  if (!confirm(`Delete code(s) ${codes.join(', ')}? Products using them will lose their markup code.`)) return;
+  try {
+    await Promise.all(codes.map(c => deleteMarkup(c)));
+    markupCodes = markupCodes.filter(m => !selectedMu.has(m.code));
+    selectedMu.clear();
+    [products] = await Promise.all([getProducts()]);
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+    toast('✓ Code(s) deleted', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════════
+//  TAB SWITCHING
+// ══════════════════════════════════════════════
+
+function switchTab(tab) {
+  ['markup','categories'].forEach(t => {
+    const btn   = document.getElementById(`tab-${t}`);
+    const panel = document.getElementById(`tab-panel-${t}`);
+    const acts  = document.getElementById(`tab-actions-${t}`);
+    const active = t === tab;
+    btn.style.color       = active ? 'var(--blue)' : 'var(--muted)';
+    btn.style.borderBottom= active ? '2px solid var(--blue)' : '2px solid transparent';
+    if (panel) panel.style.display = active ? '' : 'none';
+    if (acts)  acts.style.display  = active ? 'flex' : 'none';
+  });
+}
+
+// ══════════════════════════════════════════════
+//  CATEGORIES
+// ══════════════════════════════════════════════
+
+let selectedCat = new Set();
+let editingCatCell = null;
+
+function renderCategories() {
+  const tbody = document.getElementById('cat-body');
+  if (!categories.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="3">No categories yet — click ＋ New Category</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = categories.map(name => {
+    const count = products.filter(p => p.category === name).length;
+    const ck    = selectedCat.has(name) ? 'checked' : '';
+    return `<tr id="cat-row-${esc(name)}" class="${selectedCat.has(name)?'selected':''}">
+      <td><div class="cell-display" style="padding:7px;text-align:center">
+        <input type="checkbox" data-cat="${esc(name)}" ${ck}
+          onchange="toggleSelectCat('${esc(name)}', this.checked)"></div></td>
+      <td class="editable"><div class="cell-display" data-cat="${esc(name)}" data-field="cat-name"
+        style="cursor:text">${esc(name)}</div></td>
+      <td><div class="cell-display" style="color:var(--muted)">${count} product${count!==1?'s':''}</div></td>
+    </tr>`;
+  }).join('');
+
+  // Attach inline rename
+  tbody.querySelectorAll('td.editable .cell-display[data-cat]').forEach(el => {
+    el.addEventListener('dblclick', () => startCatEdit(el));
+  });
+}
+
+function toggleSelectCat(name, checked) {
+  if (checked) selectedCat.add(name); else selectedCat.delete(name);
+  const row = document.getElementById(`cat-row-${name}`);
+  if (row) row.classList.toggle('selected', checked);
+}
+
+function toggleAllCat(cb) {
+  categories.forEach(c => {
+    if (cb.checked) selectedCat.add(c); else selectedCat.delete(c);
+  });
+  renderCategories();
+}
+
+// Inline rename
+function startCatEdit(displayEl) {
+  if (editingCatCell) commitCatEdit();
+  const oldName = displayEl.dataset.cat;
+  const td      = displayEl.parentElement;
+  const input   = document.createElement('input');
+  input.className = 'cell-input';
+  input.value     = oldName;
+  td.innerHTML    = '';
+  td.appendChild(input);
+  input.focus(); input.select();
+  editingCatCell = { oldName, td, input };
+  input.addEventListener('blur',    commitCatEdit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); commitCatEdit(); }
+    if (e.key === 'Escape') { e.preventDefault(); editingCatCell = null; renderCategories(); }
+  });
+}
+
+async function commitCatEdit() {
+  if (!editingCatCell) return;
+  const { oldName, input } = editingCatCell;
+  editingCatCell = null;
+  const newName = input.value.trim();
+  if (!newName || newName === oldName) { renderCategories(); return; }
+  try {
+    await api('PUT', `/categories/${encodeURIComponent(oldName)}`, { name: newName });
+    categories = categories.map(c => c === oldName ? newName : c);
+    // Update products array in-place
+    products.forEach(p => { if (p.category === oldName) p.category = newName; });
+    _bustSort();
+    renderCategories();
+    renderProducts();
+    // Also refresh category select in any open product modal
+    populateCategorySelect(newName);
+    toast(`✓ Category renamed to "${newName}"`, 'success');
+  } catch(e) {
+    toast('Rename failed: ' + e.message, 'error');
+    renderCategories();
+  }
+}
+
+async function openAddCategory() {
+  const name = prompt('New category name:');
+  if (!name || !name.trim()) return;
+  try {
+    await api('POST', '/categories', { name: name.trim() });
+    categories.push(name.trim());
+    categories.sort((a,b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    renderCategories();
+    toast(`✓ Category "${name.trim()}" added`, 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteSelectedCategory() {
+  if (!selectedCat.size) { toast('Select a category first', 'error'); return; }
+  const names = [...selectedCat];
+  if (!confirm(`Delete ${names.length} category(s)?\nProducts using them will have their category cleared.`)) return;
+  try {
+    await Promise.all(names.map(n => api('DELETE', `/categories/${encodeURIComponent(n)}`)));
+    categories = categories.filter(c => !selectedCat.has(c));
+    // Clear category on affected products
+    products.forEach(p => { if (selectedCat.has(p.category)) p.category = null; });
+    selectedCat.clear();
+    _bustSort();
+    renderCategories();
+    renderProducts();
+    toast('✓ Category(s) deleted', 'success');
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// Populate the category select in Add Product modal
+function populateCategorySelect(selectedVal) {
+  const sel = document.getElementById('f-category');
+  if (!sel) return;
+  const current = selectedVal !== undefined ? selectedVal : sel.value;
+  sel.innerHTML = '<option value="">— none —</option>' +
+    categories.map(c =>
+      `<option value="${esc(c)}" ${c === current ? 'selected' : ''}>${esc(c)}</option>`
+    ).join('');
+}
+
+// ══════════════════════════════════════════════
+//  CSV IMPORT — FIELD MAPPING
+// ══════════════════════════════════════════════
+
+const DB_FIELDS = [
+  { key: 'name',        label: 'Name',        type: 'text' },
+  { key: 'sku',         label: 'SKU',         type: 'text' },
+  { key: 'category',    label: 'Category',    type: 'text' },
+  { key: 'pack_qty',    label: 'Pack Qty',    type: 'int'  },
+  { key: 'pack_cost',   label: 'Pack Cost',   type: 'float'},
+  { key: 'markup_code', label: 'Markup Code', type: 'text' },
+];
+
+// Auto-guess mappings from CSV header names
+const ALIASES = {
+  name: ['name','product','product_name','item','description','title'],
+  sku:  ['sku','code','item_code','product_code','part_no','part_number','barcode'],
+  category: ['category','cat','type','dept','department','group'],
+  pack_qty: ['pack_qty','pack_size','qty','quantity','units_per_pack','pack'],
+  pack_cost: ['pack_cost','cost','buy_price','purchase_price','buy','price_each','unit_cost'],
+  markup_code: ['markup_code','markup','price_code','margin_code','code'],
+};
+
+let csvState = {
+  lines: [], headers: [], rows: [], mapping: {}, mode: 'replace'
+};
+
+function triggerImport() {
+  document.getElementById('csv-input').value = '';
+  document.getElementById('csv-input').click();
+}
+
+async function handleCSV(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) { toast('CSV has no data rows', 'error'); return; }
+
+  const headers = parseCSVLine(lines[0]).map(h => h.trim());
+  const rows    = lines.slice(1).map(l => parseCSVLine(l));
+
+  // Auto-guess mapping
+  const mapping = {};
+  headers.forEach((h, i) => {
+    const norm = h.toLowerCase().replace(/[\s\-]+/g, '_');
+    for (const [dbKey, variants] of Object.entries(ALIASES)) {
+      if (variants.includes(norm) && !Object.values(mapping).includes(dbKey)) {
+        mapping[i] = dbKey;
+        return;
+      }
+    }
+    mapping[i] = 'ignore';
+  });
+
+  csvState = { lines, headers, rows, mapping, mode: 'replace' };
+
+  document.getElementById('import-filename').textContent = `${file.name}  ·  ${rows.length} data rows`;
+  document.getElementById('import-modal').classList.remove('hidden');
+  setMode('replace');
+  renderMappingRows();
+  renderPreview();
+}
+
+function setMode(mode) {
+  csvState.mode = mode;
+  ['replace','update','merge'].forEach(m => {
+    document.getElementById(`mode-${m}`).classList.toggle('active', m === mode);
+  });
+}
+
+function renderMappingRows() {
+  const tbody = document.getElementById('map-rows');
+  tbody.innerHTML = csvState.headers.map((h, i) => {
+    const sample = csvState.rows[0]?.[i] ?? '';
+    const mapped = csvState.mapping[i] || 'ignore';
+    const opts = `<option value="ignore">— ignore —</option>` +
+      DB_FIELDS.map(f =>
+        `<option value="${f.key}" ${mapped === f.key ? 'selected' : ''}>${f.label}</option>`
+      ).join('');
+    return `<tr>
+      <td><span class="csv-col-name">${esc(h)}</span></td>
+      <td class="map-arrow">→</td>
+      <td><select class="map-select ${mapped !== 'ignore' ? 'mapped' : 'ignored'}"
+            onchange="updateMapping(${i}, this.value, this)">${opts}</select></td>
+      <td style="color:var(--muted);font-size:11px;font-family:monospace">${esc(String(sample).slice(0,30))}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateMapping(colIdx, value, selectEl) {
+  // Prevent duplicate DB field mappings (except ignore)
+  if (value !== 'ignore') {
+    Object.keys(csvState.mapping).forEach(k => {
+      if (+k !== colIdx && csvState.mapping[k] === value) {
+        csvState.mapping[k] = 'ignore';
+      }
+    });
+  }
+  csvState.mapping[colIdx] = value;
+  renderMappingRows();   // re-render to reflect de-duplication
+  renderPreview();
+}
+
+function renderPreview() {
+  const table = document.getElementById('preview-table');
+  // Build mapped-field column list (ignore = skip)
+  const activeCols = Object.entries(csvState.mapping)
+    .filter(([,v]) => v !== 'ignore')
+    .map(([i, dbKey]) => ({ i: +i, dbKey, label: DB_FIELDS.find(f=>f.key===dbKey)?.label || dbKey }));
+
+  if (!activeCols.length) {
+    table.innerHTML = '<tr><td style="padding:12px;color:var(--muted)">No fields mapped yet</td></tr>';
+    document.getElementById('preview-note').textContent = '';
+    return;
+  }
+
+  const previewRows = csvState.rows.slice(0, 4);
+  const thead = `<thead><tr>${activeCols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>`;
+  const tbody = `<tbody>${previewRows.map(row =>
+    `<tr>${activeCols.map(c => `<td>${esc(String(row[c.i] ?? '').slice(0,40))}</td>`).join('')}</tr>`
+  ).join('')}</tbody>`;
+  table.innerHTML = thead + tbody;
+
+  const total = csvState.rows.length;
+  const mapped = activeCols.length;
+  document.getElementById('preview-note').textContent =
+    `${mapped} field${mapped!==1?'s':''} mapped · ${total} row${total!==1?'s':''} will be processed`;
+}
+
+function closeImportModal() {
+  document.getElementById('import-modal').classList.add('hidden');
+}
+
+async function runImport() {
+  const { rows, mapping, mode } = csvState;
+  const btn = document.getElementById('btn-run-import');
+  const prog = document.getElementById('import-progress');
+
+  // Build field→colIndex lookup
+  const fieldMap = {};
+  Object.entries(mapping).forEach(([i, dbKey]) => {
+    if (dbKey !== 'ignore') fieldMap[dbKey] = +i;
+  });
+
+  if (!Object.keys(fieldMap).length) {
+    toast('Map at least one field first', 'error'); return;
+  }
+
+  btn.disabled = true;
+  prog.textContent = 'Preparing…';
+
+  const coerce = (key, val) => {
+    if (val == null || val === '') return null;
+    if (key === 'pack_qty')  return Math.max(0.001, parseFloat(val) || 1);
+    if (key === 'pack_cost') return parseFloat(val) || 0;
+    if (key === 'markup_code') return String(val).toUpperCase().trim();
+    return String(val).trim() || null;
+  };
+
+  const buildRow = (csvRow) => {
+    const row = {};
+    Object.entries(fieldMap).forEach(([dbKey, colIdx]) => {
+      row[dbKey] = coerce(dbKey, csvRow[colIdx]);
+    });
+    return row;
+  };
+
+  try {
+    let added = 0, updated = 0, skipped = 0;
+
+    if (mode === 'replace') {
+      prog.textContent = 'Deleting existing products…';
+      await Promise.all(products.map(p => deleteProduct(p.id)));
+      const newProds = [];
+      for (let i = 0; i < rows.length; i++) {
+        prog.textContent = `Importing ${i+1} / ${rows.length}…`;
+        const row = buildRow(rows[i]);
+        const p   = await postProduct(row);
+        newProds.push(p);
+        added++;
+      }
+      products = newProds;
+
+    } else {
+      // update or merge — need SKU mapping
+      const skuMap = {};
+      if ('sku' in fieldMap) {
+        products.forEach(p => { if (p.sku) skuMap[p.sku.toLowerCase()] = p; });
+      }
+      for (let i = 0; i < rows.length; i++) {
+        prog.textContent = `Processing ${i+1} / ${rows.length}…`;
+        const row  = buildRow(rows[i]);
+        const skuVal = row.sku ? row.sku.toLowerCase() : null;
+        const existing = skuVal ? skuMap[skuVal] : null;
+
+        if (existing) {
+          const updated_p = await patchProduct(existing.id, row);
+          const idx = products.findIndex(p => p.id === existing.id);
+          if (idx !== -1) products[idx] = updated_p;
+          updated++;
+        } else if (mode === 'merge') {
+          const p = await postProduct(row);
+          products.push(p);
+          added++;
+        } else {
+          skipped++;
+        }
+      }
+      // Re-fetch to get fresh computed values
+      products = await getProducts();
+      _bustSort();
+    }
+
+    markupCodes = await getMarkups();
+    categories  = await getCategories();
+    closeImportModal();
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+
+    const parts = [];
+    if (added)   parts.push(`${added} added`);
+    if (updated) parts.push(`${updated} updated`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    toast(`✓ Import complete — ${parts.join(', ')}`, 'success');
+
+  } catch(e) {
+    toast('Import error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    prog.textContent = '';
+  }
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let i = 0;
+  while (i <= line.length) {
+    if (i === line.length) { result.push(''); break; }
+    if (line[i] === '"') {
+      // Proper quoted field — " must be at start of field
+      let cur = '';
+      i++; // skip opening quote
+      while (i < line.length) {
+        if (line[i] === '"') {
+          if (line[i + 1] === '"') { cur += '"'; i += 2; continue; } // escaped quote
+          i++; break; // closing quote
+        }
+        cur += line[i++];
+      }
+      result.push(cur);
+      if (line[i] === ',') i++; // skip comma after closing quote
+    } else {
+      // Unquoted field — read until comma (treat any " inside as literal)
+      let cur = '';
+      while (i < line.length && line[i] !== ',') cur += line[i++];
+      result.push(cur);
+      if (line[i] === ',') i++; // skip comma
+    }
+  }
+  return result;
+}
+
+function exportCSV() {
+  const rows  = getFiltered();
+  const cols  = ['name','sku','category','pack_qty','pack_cost','markup_code',
+                 'unit_cost','markup_pct','sell_price','margin','margin_pct'];
+  const lines = [cols.join(',')];
+  rows.forEach(p => {
+    lines.push(cols.map(c => {
+      const v = p[c] ?? '';
+      return String(v).includes(',') ? `"${v}"` : v;
+    }).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'prices_export.csv';
+  a.click();
+  toast('✓ CSV downloaded', 'success');
+}
+
+function exportSM8() {
+  const rows = getFiltered();
+  if (!rows.length) { toast('No products to export', 'error'); return; }
+
+  // SM8 import format — must match the exact column structure SM8 expects:
+  // col0=?,  col1=?,  col2=Item Number,  col3=Name,  col4=Purchase Cost,
+  // col5=Quantity In Stock,  col6=Price,  col7=Price Includes Taxes,
+  // col8=Tax Rate,  col9=Item is Inventoried,  col10=Barcode
+  const header = ['', '', 'Item Number', 'Name', 'Purchase Cost',
+                  'Quantity In Stock', 'Price', 'Price Includes Taxes',
+                  'Tax Rate', 'Item is Inventoried', 'Barcode'];
+
+  const csvField = v => {
+    const s = String(v ?? '');
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const lines = [header.join(',')];
+
+  rows.forEach(p => {
+    const itemNumber  = p.sku        || '';
+    const name        = p.name       || '';
+    const purchaseCost = (p.unit_cost  || 0).toFixed(4);   // unit cost = pack_cost / pack_qty
+    const price       = (p.sell_price || 0).toFixed(4);    // sell price from markup
+    const isInventoried = p.is_stocked ? 'Yes' : 'No';
+
+    // col0 and col1 are left blank (SM8 internal flags, not needed for import)
+    const cols = [
+      '',               // col0 — SM8 internal
+      '',               // col1 — SM8 internal
+      csvField(itemNumber),
+      csvField(name),
+      purchaseCost,     // Purchase Cost
+      '0',              // Quantity In Stock — not tracked here
+      price,            // Price (sell price)
+      '',               // Price Includes Taxes — leave blank, SM8 handles
+      '',               // Tax Rate — leave blank
+      isInventoried,    // Item is Inventoried
+      '',               // Barcode — leave blank
+    ];
+    lines.push(cols.join(','));
+  });
+
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  const ts   = new Date().toISOString().slice(0,10);
+  a.download = `sm8_update_${ts}.csv`;
+  a.click();
+  toast(`✓ SM8 export — ${rows.length} products`, 'success');
+}
+
+// ══════════════════════════════════════════════
+//  SM8 IMPORT
+// ══════════════════════════════════════════════
+
+// SM8 CSV column indices (0-based):
+// 0=?, 1=?, 2=Item Number, 3=Name, 4=Purchase Cost,
+// 5=Quantity In Stock, 6=Price, 7=Price Includes Taxes,
+// 8=Tax Rate, 9=Item is Inventoried, 10=Barcode
+
+let sm8State = { rows: [], mode: 'replace' };
+
+function triggerSM8() {
+  document.getElementById('sm8-input').value = '';
+  document.getElementById('sm8-input').click();
+}
+
+async function handleSM8(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text  = await file.text();
+  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) { toast('SM8 CSV has no data', 'error'); return; }
+
+  const header = parseCSVLine(lines[0]).map(h => h.trim());
+
+  // Locate columns by name (robust — works even if SM8 adds/removes cols)
+  const col = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
+  const iSKU  = col('Item Number');
+  const iName = col('Name');
+  const iCost = col('Purchase Cost');
+  const iInv  = col('Item is Inventoried');
+
+  if (iInv === -1) {
+    toast('Could not find "Item is Inventoried" column in this file', 'error'); return;
+  }
+
+  const allRows = lines.slice(1).map(l => parseCSVLine(l));
+  const invRows = allRows.filter(r => (r[iInv] || '').trim().toLowerCase() === 'yes'
+                                   && (r[iSKU]  || '').trim() !== '');
+
+  if (!invRows.length) {
+    toast('No inventoried items found in file', 'error'); return;
+  }
+
+  sm8State = { rows: invRows, mode: 'replace', iSKU, iName, iCost };
+
+  // Populate markup dropdown — pre-select system default
+  const sel = document.getElementById('sm8-markup-select');
+  const def = defaultMarkup();
+  sel.innerHTML = '<option value="">— none (set manually later) —</option>' +
+    markupCodes.map(m =>
+      `<option value="${esc(m.code)}" ${m.code === def ? 'selected' : ''}>${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)</option>`
+    ).join('');
+
+  document.getElementById('sm8-filename').innerHTML =
+    `File: <strong>${esc(file.name)}</strong> · 
+     <span style="color:var(--green)">${invRows.length} inventoried items</span> of ${allRows.length} total rows`;
+
+  setSM8Mode('replace');
+  renderSM8Preview();
+  document.getElementById('sm8-modal').classList.remove('hidden');
+}
+
+function setSM8Mode(mode) {
+  sm8State.mode = mode;
+  ['replace','update','merge'].forEach(m => {
+    document.getElementById(`sm8-mode-${m}`).classList.toggle('active', m === mode);
+  });
+}
+
+function renderSM8Preview() {
+  const { rows, iSKU, iName, iCost } = sm8State;
+  const preview = rows.slice(0, 5);
+  const table   = document.getElementById('sm8-preview-table');
+  table.innerHTML =
+    `<thead><tr><th>SKU</th><th>Name</th><th>Purchase Cost</th></tr></thead>` +
+    `<tbody>${preview.map(r => `<tr>
+      <td>${esc((r[iSKU]||'').trim())}</td>
+      <td>${esc((r[iName]||'').trim().slice(0,60))}${(r[iName]||'').length>60?'…':''}</td>
+      <td>$${parseFloat((r[iCost]||'0').trim()).toFixed(4)}</td>
+    </tr>`).join('')}</tbody>`;
+  document.getElementById('sm8-preview-note').textContent =
+    `Showing 5 of ${rows.length} inventoried items · Pack Qty defaults to 1`;
+}
+
+function closeSM8Modal() {
+  document.getElementById('sm8-modal').classList.add('hidden');
+}
+
+async function runSM8Import() {
+  const { rows, mode, iSKU, iName, iCost } = sm8State;
+  const markupCode = document.getElementById('sm8-markup-select').value || null;
+  const btn  = document.getElementById('btn-run-sm8');
+  const prog = document.getElementById('sm8-progress');
+  btn.disabled = true;
+
+  // Build a SKU→existing-markup-code lookup so we don't overwrite codes already set
+  const existingSkuMarkup = {};
+  products.forEach(p => { if (p.sku) existingSkuMarkup[p.sku.toLowerCase()] = p.markup_code; });
+
+  // For a new item: use the selected code, else fall back to DEFAULT (30%)
+  const resolveMarkup = (sku, isNew) => {
+    if (!isNew) {
+      // Existing item — only apply the selected code if one was explicitly chosen
+      return markupCode || undefined;
+    }
+    // New item — use selected, or DEFAULT
+    return markupCode || 'DEFAULT';
+  };
+
+  const buildRow = (r, isNew = true) => ({
+    sku:         (r[iSKU]  || '').trim() || null,
+    name:        (r[iName] || '').trim() || null,
+    markup_code: resolveMarkup((r[iSKU] || '').trim().toLowerCase(), isNew),
+    is_stocked:  true,
+  });
+
+  try {
+    let added = 0, updated = 0, skipped = 0;
+
+    if (mode === 'replace') {
+      prog.textContent = 'Clearing existing products…';
+      await Promise.all(products.map(p => deleteProduct(p.id)));
+      const newProds = [];
+      for (let i = 0; i < rows.length; i++) {
+        prog.textContent = `Importing ${i+1} / ${rows.length}…`;
+        const p = await postProduct(buildRow(rows[i], true));
+        newProds.push(p);
+        added++;
+      }
+      products = newProds;
+
+    } else {
+      // update or merge — match on SKU
+      const skuMap = {};
+      products.forEach(p => { if (p.sku) skuMap[p.sku.toLowerCase()] = p; });
+
+      for (let i = 0; i < rows.length; i++) {
+        prog.textContent = `Processing ${i+1} / ${rows.length}…`;
+        const sku      = (rows[i][iSKU] || '').trim();
+        const existing = sku ? skuMap[sku.toLowerCase()] : null;
+
+        if (existing) {
+          const patch = {
+            name:       (rows[i][iName] || '').trim() || null,
+            is_stocked: true,
+          };
+          // Only update markup if: item has none set, or user explicitly chose one
+          if (!existing.markup_code) patch.markup_code = markupCode || 'DEFAULT';
+          else if (markupCode)       patch.markup_code = markupCode;
+
+          const u = await patchProduct(existing.id, patch);
+          const idx = products.findIndex(p => p.id === existing.id);
+          if (idx !== -1) products[idx] = u;
+          updated++;
+        } else if (mode === 'merge') {
+          const p = await postProduct(buildRow(rows[i], true));
+          products.push(p);
+          added++;
+        } else {
+          skipped++;
+        }
+      }
+      products = await getProducts();
+      _bustSort();
+    }
+
+    markupCodes = await getMarkups();
+    categories  = await getCategories();
+    closeSM8Modal();
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+
+    const parts = [];
+    if (added)   parts.push(`${added} added`);
+    if (updated) parts.push(`${updated} updated`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    toast(`✓ SM8 import complete — ${parts.join(', ')}`, 'success');
+
+  } catch(err) {
+    toast('SM8 import error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    prog.textContent = '';
+  }
+}
+
+// ══════════════════════════════════════════════
+//  MIDDYS IMPORT
+// ══════════════════════════════════════════════
+
+let middysState = { newItems: [], updateItems: [] };
+
+function triggerMiddys() {
+  document.getElementById('middys-input').value = '';
+  document.getElementById('middys-input').click();
+}
+
+async function handleMiddys(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const text = await file.text();
+  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) { toast('Middys CSV has no data rows', 'error'); return; }
+
+  const header = parseCSVLine(lines[0]).map(h => h.trim());
+  const col    = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+  const iSKU  = col('New Product Code');
+  const iName = col('Description');
+  const iCost = col('Purchases Unit Price');
+
+  if (iSKU === -1 || iName === -1 || iCost === -1) {
+    toast('Could not find required Middys columns (New Product Code, Description, Purchases Unit Price)', 'error');
+    return;
+  }
+
+  const rows = lines.slice(1).map(l => parseCSVLine(l));
+
+  // Build SKU lookup from current DB products
+  const skuMap = {};
+  products.forEach(p => { if (p.sku) skuMap[p.sku.trim().toLowerCase()] = p; });
+
+  const newItems    = [];
+  const updateItems = [];
+
+  rows.forEach(r => {
+    const sku  = (r[iSKU]  || '').trim();
+    const name = (r[iName] || '').trim();
+    const cost = parseFloat((r[iCost] || '0').trim()) || 0;
+    if (!sku) return;
+
+    const existing = skuMap[sku.toLowerCase()];
+    if (existing) {
+      updateItems.push({ existing, sku, name, cost, oldCost: existing.pack_cost });
+    } else {
+      newItems.push({ sku, name, cost });
+    }
+  });
+
+  middysState = { newItems, updateItems };
+
+  // Populate markup dropdown — pre-select system default
+  const sel = document.getElementById('middys-markup-select');
+  const def = defaultMarkup();
+  sel.innerHTML = '<option value="">— none (assign manually later) —</option>' +
+    markupCodes.map(m =>
+      `<option value="${esc(m.code)}" ${m.code === def ? 'selected' : ''}>${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)</option>`
+    ).join('');
+
+  // Update summary badges
+  document.getElementById('middys-count-new').textContent    = newItems.length;
+  document.getElementById('middys-count-update').textContent = updateItems.length;
+  document.getElementById('middys-count-total').textContent  = rows.length;
+  document.getElementById('middys-summary').style.display    = 'block';
+  document.getElementById('middys-filename').innerHTML =
+    `File: <strong>${esc(file.name)}</strong> · ${rows.length} rows`;
+
+  // Preview new items table (all of them — report will list them too)
+  const newSection = document.getElementById('middys-new-section');
+  if (newItems.length) {
+    const t = document.getElementById('middys-new-table');
+    t.innerHTML =
+      `<thead><tr><th>SKU (New Product Code)</th><th>Name</th><th>Pack Cost</th></tr></thead>` +
+      `<tbody>${newItems.slice(0,10).map(i =>
+        `<tr>
+          <td style="color:var(--violet)">${esc(i.sku)}</td>
+          <td>${esc(i.name.slice(0,55))}${i.name.length>55?'…':''}</td>
+          <td style="color:var(--orange)">$${i.cost.toFixed(4)}</td>
+        </tr>`
+      ).join('')}
+      ${newItems.length > 10 ? `<tr><td colspan="3" style="color:var(--muted);text-align:center">…and ${newItems.length-10} more</td></tr>` : ''}
+      </tbody>`;
+    newSection.style.display = 'block';
+  } else {
+    newSection.style.display = 'none';
+  }
+
+  // Preview updated items
+  const updateSection = document.getElementById('middys-update-section');
+  if (updateItems.length) {
+    const t = document.getElementById('middys-update-table');
+    t.innerHTML =
+      `<thead><tr><th>SKU</th><th>Name</th><th>Old Cost</th><th>New Cost</th><th>Change</th></tr></thead>` +
+      `<tbody>${updateItems.slice(0,10).map(i => {
+        const diff = i.cost - i.oldCost;
+        const cls  = diff > 0 ? 'color:var(--red)' : diff < 0 ? 'color:var(--green)' : 'color:var(--muted)';
+        const sign = diff > 0 ? '+' : '';
+        return `<tr>
+          <td style="color:var(--violet)">${esc(i.sku)}</td>
+          <td>${esc((i.existing.name||'').slice(0,40))}${(i.existing.name||'').length>40?'…':''}</td>
+          <td style="color:var(--muted)">$${i.oldCost.toFixed(4)}</td>
+          <td style="color:var(--blue)">$${i.cost.toFixed(4)}</td>
+          <td style="${cls}">${sign}$${Math.abs(diff).toFixed(4)}</td>
+        </tr>`;
+      }).join('')}
+      ${updateItems.length > 10 ? `<tr><td colspan="5" style="color:var(--muted);text-align:center">…and ${updateItems.length-10} more</td></tr>` : ''}
+      </tbody>`;
+    document.getElementById('middys-update-note').textContent =
+      `Only pack_cost will be updated on existing items — name, markup code and all other fields are preserved`;
+    updateSection.style.display = 'block';
+  } else {
+    updateSection.style.display = 'none';
+  }
+
+  document.getElementById('middys-modal').classList.remove('hidden');
+}
+
+function closeMiddysModal() {
+  document.getElementById('middys-modal').classList.add('hidden');
+}
+
+async function runMiddysImport() {
+  const { newItems, updateItems } = middysState;
+  const markupCode      = document.getElementById('middys-markup-select').value || null;
+  const updateSupplier  = document.getElementById('middys-update-supplier').checked;
+  const updatePartNo    = document.getElementById('middys-update-partno').checked;
+  const btn  = document.getElementById('btn-run-middys');
+  const prog = document.getElementById('middys-progress');
+  btn.disabled = true;
+
+  const addedList   = [];
+  let   updatedCount = 0;
+
+  try {
+    // 1. Update existing — pack_cost always; supplier fields only if opted in
+    const total = newItems.length + updateItems.length;
+    let   done  = 0;
+
+    for (const item of updateItems) {
+      prog.textContent = `Updating ${++done} / ${total}…`;
+      const patch = { pack_cost: item.cost };
+      if (updateSupplier) patch.preferred_supplier   = 'Middys';
+      if (updatePartNo)   patch.supplier_part_number = item.sku;
+      const u = await patchProduct(item.existing.id, patch);
+      const idx = products.findIndex(p => p.id === item.existing.id);
+      if (idx !== -1) products[idx] = u;
+      updatedCount++;
+    }
+
+    // 2. Add new items
+    for (const item of newItems) {
+      prog.textContent = `Adding ${++done} / ${total}…`;
+      const p = await postProduct({
+        sku:                  item.sku,
+        name:                 item.name,
+        pack_cost:            item.cost,
+        pack_qty:             1,
+        markup_code:          markupCode,
+        preferred_supplier:   'Middys',
+        supplier_part_number: item.sku,   // New Product Code doubles as supplier part #
+      });
+      products.push(p);
+      addedList.push(p);
+    }
+
+    // Refresh computed values
+    products = await getProducts();
+    _bustSort();
+    markupCodes = await getMarkups();
+    categories  = await getCategories();
+    closeMiddysModal();
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+
+    const parts = [];
+    if (addedList.length) parts.push(`${addedList.length} added`);
+    if (updatedCount)     parts.push(`${updatedCount} updated`);
+    toast(`✓ Middys import — ${parts.join(', ')}`, 'success');
+
+    // 3. Print new-items report if any were added
+    if (addedList.length || middysState.updateItems.length) printMiddysReport(addedList, middysState.updateItems);
+
+  } catch(err) {
+    toast('Middys import error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    prog.textContent = '';
+  }
+}
+
+function printMiddysReport(items, updateItems = []) {
+  const now  = new Date().toLocaleString();
+  const rows = items.map(p => `
+    <tr>
+      <td>${esc(p.sku||'')}</td>
+      <td>${esc(p.name||'')}</td>
+      <td>$${(p.pack_cost||0).toFixed(4)}</td>
+      <td>${esc(p.markup_code||'—')}</td>
+      <td>$${(p.sell_price||0).toFixed(4)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Middys Import Report</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; font-size: 13px; color: #1e293b; margin: 32px; }
+  h1   { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  h2   { font-size: 15px; font-weight: 700; margin: 28px 0 8px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; }
+  .meta { font-size: 12px; color: #64748b; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  th { background: #f1f5f9; text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600;
+       text-transform: uppercase; letter-spacing: .05em; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 7px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) { background: #f8fafc; }
+  .warn  { background: #fffbeb !important; }
+  .label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing:.04em; }
+  .db-name  { color: #1d4ed8; }
+  .csv-name { color: #b45309; }
+  .pack-note { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+  .none-msg { color: #94a3b8; font-size: 12px; padding: 12px 0; }
+  @media print { body { margin: 16px; } }
+</style>
+</head>
+<body>
+<h1>Middys Import Report</h1>
+<div class="meta">Generated: ${now}</div>
+${items.length ? `
+<h2>New Items Added (${items.length})</h2>
+<table>
+  <thead><tr><th>SKU</th><th>Name / Description</th><th>Pack Cost</th><th>Markup Code</th><th>Sell Price</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>` : ''}
+${buildMismatchSection(updateItems)}
+<div class="footer">Border to Border Inventory Manager · Middys import report</div>
+<script>window.onload = () => window.print();<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+  else toast('Please allow pop-ups to view the new items report', 'error');
+}
+
+// ══════════════════════════════════════════════
+//  VOLTEX IMPORT
+// ══════════════════════════════════════════════
+
+let voltexState = { newItems: [], updateItems: [] };
+
+function triggerVoltex() {
+  document.getElementById('voltex-input').value = '';
+  document.getElementById('voltex-input').click();
+}
+
+async function handleVoltex(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const text  = await file.text();
+  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) { toast('Voltex CSV has no data rows', 'error'); return; }
+
+  const header = parseCSVLine(lines[0]).map(h => h.trim());
+  const col    = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+  const iSKU  = col('Item Number');
+  const iName = col('Name');
+  const iCost = col('Purchase Cost');
+
+  if (iSKU === -1 || iName === -1 || iCost === -1) {
+    toast('Could not find required Voltex columns (Item Number, Name, Purchase Cost)', 'error');
+    return;
+  }
+
+  const rows = lines.slice(1).map(l => parseCSVLine(l));
+
+  // Build SKU lookup from current DB
+  const skuMap = {};
+  products.forEach(p => { if (p.sku) skuMap[p.sku.trim().toLowerCase()] = p; });
+
+  const newItems    = [];
+  const updateItems = [];
+
+  rows.forEach(r => {
+    const sku  = (r[iSKU]  || '').trim();
+    const name = (r[iName] || '').trim();
+    const cost = parseFloat((r[iCost] || '0').trim()) || 0;
+    if (!sku) return;
+
+    const existing = skuMap[sku.toLowerCase()];
+    if (existing) {
+      updateItems.push({ existing, sku, name, cost, oldCost: existing.pack_cost });
+    } else {
+      newItems.push({ sku, name, cost });
+    }
+  });
+
+  voltexState = { newItems, updateItems };
+
+  // Populate markup dropdown with system default pre-selected
+  const sel = document.getElementById('voltex-markup-select');
+  const def = defaultMarkup();
+  sel.innerHTML = '<option value="">— none (assign manually later) —</option>' +
+    markupCodes.map(m =>
+      `<option value="${esc(m.code)}" ${m.code === def ? 'selected' : ''}>${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)</option>`
+    ).join('');
+
+  // Summary badges
+  document.getElementById('voltex-count-new').textContent    = newItems.length;
+  document.getElementById('voltex-count-update').textContent = updateItems.length;
+  document.getElementById('voltex-count-total').textContent  = rows.length;
+  document.getElementById('voltex-summary').style.display    = 'block';
+  document.getElementById('voltex-filename').innerHTML =
+    `File: <strong>${esc(file.name)}</strong> · ${rows.length} rows · descriptions on existing items will <strong style="color:var(--amber)">not</strong> be overwritten`;
+
+  // New items preview
+  const newSection = document.getElementById('voltex-new-section');
+  if (newItems.length) {
+    const t = document.getElementById('voltex-new-table');
+    t.innerHTML =
+      `<thead><tr><th>SKU (Item Number)</th><th>Name</th><th>Pack Cost</th></tr></thead>` +
+      `<tbody>${newItems.slice(0,10).map(i =>
+        `<tr>
+          <td style="color:var(--violet)">${esc(i.sku)}</td>
+          <td>${esc(i.name.slice(0,55))}${i.name.length>55?'…':''}</td>
+          <td style="color:var(--orange)">$${i.cost.toFixed(4)}</td>
+        </tr>`
+      ).join('')}
+      ${newItems.length > 10 ? `<tr><td colspan="3" style="color:var(--muted);text-align:center">…and ${newItems.length-10} more</td></tr>` : ''}
+      </tbody>`;
+    newSection.style.display = 'block';
+  } else {
+    newSection.style.display = 'none';
+  }
+
+  // Updated items preview
+  const updateSection = document.getElementById('voltex-update-section');
+  if (updateItems.length) {
+    const t = document.getElementById('voltex-update-table');
+    t.innerHTML =
+      `<thead><tr><th>SKU</th><th>Existing Name (kept)</th><th>Old Cost</th><th>New Cost</th><th>Change</th></tr></thead>` +
+      `<tbody>${updateItems.slice(0,10).map(i => {
+        const diff = i.cost - i.oldCost;
+        const cls  = diff > 0 ? 'color:var(--red)' : diff < 0 ? 'color:var(--green)' : 'color:var(--muted)';
+        const sign = diff > 0 ? '+' : '';
+        return `<tr>
+          <td style="color:var(--violet)">${esc(i.sku)}</td>
+          <td style="color:var(--subtle)">${esc((i.existing.name||'').slice(0,40))}${(i.existing.name||'').length>40?'…':''}</td>
+          <td style="color:var(--muted)">$${i.oldCost.toFixed(4)}</td>
+          <td style="color:var(--blue)">$${i.cost.toFixed(4)}</td>
+          <td style="${cls}">${sign}$${Math.abs(diff).toFixed(4)}</td>
+        </tr>`;
+      }).join('')}
+      ${updateItems.length > 10 ? `<tr><td colspan="5" style="color:var(--muted);text-align:center">…and ${updateItems.length-10} more</td></tr>` : ''}
+      </tbody>`;
+    document.getElementById('voltex-update-note').textContent =
+      `Pack cost always updated · Preferred Supplier & Supplier Part # optionally updated (see checkboxes above) · Name never overwritten`;
+    updateSection.style.display = 'block';
+  } else {
+    updateSection.style.display = 'none';
+  }
+
+  document.getElementById('voltex-modal').classList.remove('hidden');
+}
+
+function closeVoltexModal() {
+  document.getElementById('voltex-modal').classList.add('hidden');
+}
+
+async function runVoltexImport() {
+  const { newItems, updateItems } = voltexState;
+  const markupCode    = document.getElementById('voltex-markup-select').value || null;
+  const updateSupplier = document.getElementById('voltex-update-supplier').checked;
+  const updatePartNo   = document.getElementById('voltex-update-partno').checked;
+  const btn  = document.getElementById('btn-run-voltex');
+  const prog = document.getElementById('voltex-progress');
+  btn.disabled = true;
+
+  const addedList    = [];
+  let   updatedCount = 0;
+  const total        = newItems.length + updateItems.length;
+  let   done         = 0;
+
+  try {
+    // 1. Update existing — pack_cost always; supplier fields only if opted in
+    for (const item of updateItems) {
+      prog.textContent = `Updating ${++done} / ${total}…`;
+      const patch = { pack_cost: item.cost };
+      if (updateSupplier) patch.preferred_supplier   = 'Voltex';
+      if (updatePartNo)   patch.supplier_part_number = item.sku;
+      const u = await patchProduct(item.existing.id, patch);
+      const idx = products.findIndex(p => p.id === item.existing.id);
+      if (idx !== -1) products[idx] = u;
+      updatedCount++;
+    }
+
+    // 2. Add new items — name from Voltex, supplier set to Voltex
+    for (const item of newItems) {
+      prog.textContent = `Adding ${++done} / ${total}…`;
+      const p = await postProduct({
+        sku:                  item.sku,
+        name:                 item.name,
+        pack_cost:            item.cost,
+        pack_qty:             1,
+        markup_code:          markupCode,
+        preferred_supplier:   'Voltex',
+        supplier_part_number: item.sku,
+      });
+      products.push(p);
+      addedList.push(p);
+    }
+
+    products    = await getProducts();
+    _bustSort();
+    markupCodes = await getMarkups();
+    categories  = await getCategories();
+    closeVoltexModal();
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+
+    const parts = [];
+    if (addedList.length) parts.push(`${addedList.length} added`);
+    if (updatedCount)     parts.push(`${updatedCount} updated`);
+    toast(`✓ Voltex import — ${parts.join(', ')}`, 'success');
+
+    // Print new items report if any were added
+    if (addedList.length || voltexState.updateItems.length) printVoltexReport(addedList, voltexState.updateItems);
+
+  } catch(err) {
+    toast('Voltex import error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    prog.textContent = '';
+  }
+}
+
+function printVoltexReport(items, updateItems = []) {
+  const now  = new Date().toLocaleString();
+  const rows = items.map(p => `
+    <tr>
+      <td>${esc(p.sku||'')}</td>
+      <td>${esc(p.name||'')}</td>
+      <td>$${(p.pack_cost||0).toFixed(4)}</td>
+      <td>${esc(p.markup_code||'—')}</td>
+      <td>$${(p.sell_price||0).toFixed(4)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Voltex Import Report</title>
+<style>
+  body{font-family:'Segoe UI',sans-serif;font-size:13px;color:#1e293b;margin:32px;}
+  h1{font-size:20px;font-weight:700;margin-bottom:4px;}
+  h2{font-size:15px;font-weight:700;margin:28px 0 8px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;}
+  .meta{font-size:12px;color:#64748b;margin-bottom:24px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+  th{background:#f1f5f9;text-align:left;padding:8px 12px;font-size:11px;font-weight:600;
+     text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0;}
+  td{padding:7px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  tr:nth-child(even){background:#f8fafc;}
+  .warn{background:#fffbeb !important;}
+  .db-name{color:#1d4ed8;}.csv-name{color:#b45309;}
+  .pack-note{font-size:11px;color:#64748b;margin-top:4px;}
+  .footer{margin-top:24px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px;}
+  .none-msg{color:#94a3b8;font-size:12px;padding:12px 0;}
+  @media print{body{margin:16px;}}
+</style></head><body>
+<h1>Voltex Import Report</h1>
+<div class="meta">Generated: ${now}</div>
+${items.length ? `
+<h2>New Items Added (${items.length})</h2>
+<table>
+  <thead><tr><th>SKU</th><th>Name / Description</th><th>Pack Cost</th><th>Markup Code</th><th>Sell Price</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>` : ''}
+${buildMismatchSection(updateItems)}
+<div class="footer">Border to Border Inventory Manager · Voltex import report</div>
+<script>window.onload = () => window.print();<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+  else toast('Please allow pop-ups to view the new items report', 'error');
+}
+
+// ══════════════════════════════════════════════
+//  ACTROL IMPORT
+// ══════════════════════════════════════════════
+
+// Actrol CSV has NO header row. Fixed column positions:
+//  col0=?,  col1=?,  col2=Item Number,  col3=Description,
+//  col4=Unit,  col5=Price1(trade),  col6=Price2,  col7=Price3,  col8=Price4,  col9=TaxRate
+
+let actrolState = { newItems: [], updateItems: [] };
+
+function triggerActrol() {
+  document.getElementById('actrol-input').value = '';
+  document.getElementById('actrol-input').click();
+}
+
+async function handleActrol(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const text  = await file.text();
+  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').trim().split('\n').filter(l => l.trim());
+  if (!lines.length) { toast('Actrol CSV is empty', 'error'); return; }
+
+  const rows = lines.map(l => parseCSVLine(l));
+  const iSKU = 2, iName = 3, iCost = 5;
+
+  const skuMap = {};
+  products.forEach(p => { if (p.sku) skuMap[p.sku.trim().toLowerCase()] = p; });
+
+  const newItems = [], updateItems = [];
+  rows.forEach(r => {
+    if (r.length < 6) return;
+    const sku  = (r[iSKU]  || '').trim();
+    const name = (r[iName] || '').trim();
+    const cost = parseFloat((r[iCost] || '0').trim()) || 0;
+    if (!sku) return;
+    const existing = skuMap[sku.toLowerCase()];
+    if (existing) updateItems.push({ existing, sku, name, cost, oldCost: existing.pack_cost });
+    else newItems.push({ sku, name, cost });
+  });
+
+  actrolState = { newItems, updateItems };
+
+  const sel = document.getElementById('actrol-markup-select');
+  const def = defaultMarkup();
+  sel.innerHTML = '<option value="">— none (assign manually later) —</option>' +
+    markupCodes.map(m =>
+      `<option value="${esc(m.code)}" ${m.code === def ? 'selected' : ''}>` +
+      `${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)</option>`
+    ).join('');
+
+  document.getElementById('actrol-count-new').textContent    = newItems.length;
+  document.getElementById('actrol-count-update').textContent = updateItems.length;
+  document.getElementById('actrol-count-total').textContent  = rows.length;
+  document.getElementById('actrol-summary').style.display    = 'block';
+  document.getElementById('actrol-filename').innerHTML =
+    `File: <strong>${esc(file.name)}</strong> · ${rows.length} rows (no header)`;
+
+  const newSection = document.getElementById('actrol-new-section');
+  if (newItems.length) {
+    const t = document.getElementById('actrol-new-table');
+    t.innerHTML =
+      `<thead><tr><th>SKU</th><th>Description</th><th>Pack Cost</th></tr></thead>` +
+      `<tbody>${newItems.slice(0,10).map(i =>
+        `<tr><td style="color:var(--orange)">${esc(i.sku)}</td>` +
+        `<td>${esc(i.name.slice(0,55))}${i.name.length>55?'…':''}</td>` +
+        `<td style="color:var(--orange)">$${i.cost.toFixed(4)}</td></tr>`
+      ).join('')}` +
+      `${newItems.length > 10 ? `<tr><td colspan="3" style="color:var(--muted);text-align:center">…and ${newItems.length-10} more</td></tr>` : ''}</tbody>`;
+    newSection.style.display = 'block';
+  } else { newSection.style.display = 'none'; }
+
+  const updateSection = document.getElementById('actrol-update-section');
+  if (updateItems.length) {
+    const t = document.getElementById('actrol-update-table');
+    t.innerHTML =
+      `<thead><tr><th>SKU</th><th>Existing Name (kept)</th><th>Old Cost</th><th>New Cost</th><th>Change</th></tr></thead>` +
+      `<tbody>${updateItems.slice(0,10).map(i => {
+        const diff = i.cost - i.oldCost;
+        const cls  = diff > 0 ? 'color:var(--red)' : diff < 0 ? 'color:var(--green)' : 'color:var(--muted)';
+        const sign = diff > 0 ? '+' : '';
+        return `<tr><td style="color:var(--orange)">${esc(i.sku)}</td>` +
+          `<td style="color:var(--muted)">${esc((i.existing.name||'').slice(0,40))}</td>` +
+          `<td style="color:var(--muted)">$${i.oldCost.toFixed(4)}</td>` +
+          `<td style="color:var(--blue)">$${i.cost.toFixed(4)}</td>` +
+          `<td style="${cls}">${sign}$${Math.abs(diff).toFixed(4)}</td></tr>`;
+      }).join('')}` +
+      `${updateItems.length > 10 ? `<tr><td colspan="5" style="color:var(--muted);text-align:center">…and ${updateItems.length-10} more</td></tr>` : ''}</tbody>`;
+    document.getElementById('actrol-update-note').textContent =
+      'Pack cost always updated · Preferred Supplier & Supplier Part # optionally updated · Name never overwritten';
+    updateSection.style.display = 'block';
+  } else { updateSection.style.display = 'none'; }
+
+  document.getElementById('actrol-modal').classList.remove('hidden');
+}
+
+function closeActrolModal() {
+  document.getElementById('actrol-modal').classList.add('hidden');
+}
+
+async function runActrolImport() {
+  const { newItems, updateItems } = actrolState;
+  const markupCode     = document.getElementById('actrol-markup-select').value || null;
+  const updateSupplier = document.getElementById('actrol-update-supplier').checked;
+  const updatePartNo   = document.getElementById('actrol-update-partno').checked;
+  const btn  = document.getElementById('btn-run-actrol');
+  const prog = document.getElementById('actrol-progress');
+  btn.disabled = true;
+
+  const addedList = [];
+  let updatedCount = 0, done = 0;
+  const total = newItems.length + updateItems.length;
+
+  try {
+    for (const item of updateItems) {
+      prog.textContent = `Updating ${++done} / ${total}…`;
+      const patch = { pack_cost: item.cost };
+      if (updateSupplier) patch.preferred_supplier   = 'Actrol';
+      if (updatePartNo)   patch.supplier_part_number = item.sku;
+      const u = await patchProduct(item.existing.id, patch);
+      const idx = products.findIndex(p => p.id === item.existing.id);
+      if (idx !== -1) products[idx] = u;
+      updatedCount++;
+    }
+
+    for (const item of newItems) {
+      prog.textContent = `Adding ${++done} / ${total}…`;
+      const p = await postProduct({
+        sku: item.sku, name: item.name, pack_cost: item.cost, pack_qty: 1,
+        markup_code: markupCode, preferred_supplier: 'Actrol',
+        supplier_part_number: item.sku, is_stocked: false,
+      });
+      products.push(p);
+      addedList.push(p);
+    }
+
+    products = await getProducts();
+    _bustSort();
+    markupCodes = await getMarkups();
+    categories  = await getCategories();
+    closeActrolModal();
+    renderProducts(); renderMarkupCodes(); updateStats();
+
+    const parts = [];
+    if (addedList.length) parts.push(`${addedList.length} added`);
+    if (updatedCount)     parts.push(`${updatedCount} updated`);
+    toast(`✓ Actrol import — ${parts.join(', ')}`, 'success');
+    if (addedList.length || actrolState.updateItems.length) printActrolReport(addedList, actrolState.updateItems);
+
+  } catch(err) {
+    toast('Actrol import error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; prog.textContent = '';
+  }
+}
+
+// ── Shared mismatch section builder ──────────
+function buildMismatchSection(updateItems) {
+  // Only stocked items where supplier name != DB name (case-insensitive trim)
+  const mismatches = updateItems.filter(item => {
+    if (!item.existing.is_stocked) return false;
+    const dbName  = (item.existing.name || '').trim().toLowerCase();
+    const csvName = (item.name || '').trim().toLowerCase();
+    return csvName && dbName && dbName !== csvName;
+  });
+
+  if (!mismatches.length) {
+    return `<h2>Name Reconciliation — Stocked Items</h2>
+<p class="none-msg">✓ All stocked item names match the supplier file.</p>`;
+  }
+
+  const rows = mismatches.map(item => `
+    <tr class="warn">
+      <td>${esc(item.sku)}</td>
+      <td>
+        <div><span class="label db-name">DB:</span> ${esc(item.existing.name||'')}</div>
+        <div><span class="label csv-name">Supplier:</span> ${esc(item.name||'')}</div>
+      </td>
+      <td>${esc(item.existing.pack_qty||1)}</td>
+      <td>$${(item.existing.pack_cost||0).toFixed(4)}</td>
+      <td class="pack-note">Review pack qty — name difference may indicate unit change</td>
+    </tr>`).join('');
+
+  return `<h2>⚠ Name Reconciliation — Stocked Items with Different Names (${mismatches.length})</h2>
+<p style="font-size:12px;color:#92400e;margin-bottom:10px;">
+  These stocked items have different names in the database vs the supplier file.
+  Check pack quantity is still correct — a name change sometimes means a packaging change.
+</p>
+<table>
+  <thead>
+    <tr>
+      <th style="width:110px">SKU</th>
+      <th>Names</th>
+      <th style="width:80px">Pack Qty</th>
+      <th style="width:90px">Pack Cost</th>
+      <th>Action Required</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>`;
+}
+
+function printActrolReport(items, updateItems = []) {
+  const now  = new Date().toLocaleString();
+  const rows = items.map(p =>
+    `<tr><td>${esc(p.sku||'')}` +
+    `</td><td>${esc(p.name||'')}` +
+    `</td><td>$${(p.pack_cost||0).toFixed(4)}` +
+    `</td><td>${esc(p.markup_code||'—')}` +
+    `</td><td>$${(p.sell_price||0).toFixed(4)}</td></tr>`
+  ).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Actrol Import Report</title>
+<style>
+  body{font-family:'Segoe UI',sans-serif;font-size:12px;color:#1e293b;padding:24px;}
+  h1{font-size:18px;font-weight:700;margin-bottom:2px;}
+  h2{font-size:14px;font-weight:700;margin:24px 0 8px;padding-bottom:5px;border-bottom:2px solid #e2e8f0;}
+  .meta{font-size:11px;color:#64748b;margin-bottom:20px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+  th{background:#f1f5f9;text-align:left;padding:6px 10px;font-size:10px;font-weight:700;
+     text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0;}
+  td{padding:5px 10px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+  tr:nth-child(even){background:#f8fafc;}
+  .warn{background:#fffbeb !important;}
+  .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-right:4px;}
+  .db-name{color:#1d4ed8;}.csv-name{color:#b45309;}
+  .pack-note{font-size:10px;color:#64748b;}
+  .footer{margin-top:20px;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px;}
+  .none-msg{color:#94a3b8;font-size:12px;padding:8px 0;}
+  @media print{body{padding:12px;}}
+</style></head><body>
+<h1>Actrol Import Report</h1>
+<div class="meta">Generated: ${now}</div>
+${items.length ? `
+<h2>New Items Added (${items.length})</h2>
+<table><thead><tr><th>SKU</th><th>Description</th><th>Pack Cost</th><th>Markup</th><th>Sell Price</th></tr></thead>
+<tbody>${rows}</tbody></table>` : ''}
+${buildMismatchSection(updateItems)}
+<div class="footer">Border to Border Inventory Manager · Actrol import report</div>
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+  else toast('Please allow pop-ups to view the new items report', 'error');
+}
+
+// ══════════════════════════════════════════════
+//  SPLITTER (drag to resize panes)
+// ══════════════════════════════════════════════
+(function() {
+  const divider  = document.getElementById('divider');
+  const paneTop  = document.getElementById('pane-top');
+  const paneBot  = document.getElementById('pane-bottom');
+  let dragging   = false, startY = 0, startTop = 0, startBot = 0;
+
+  divider.addEventListener('mousedown', e => {
+    dragging = true;
+    startY   = e.clientY;
+    startTop = paneTop.getBoundingClientRect().height;
+    startBot = paneBot.getBoundingClientRect().height;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const dy   = e.clientY - startY;
+    const newT = Math.max(80, startTop + dy);
+    const newB = Math.max(80, startBot - dy);
+    paneTop.style.flex = 'none';
+    paneBot.style.flex = 'none';
+    paneTop.style.height = newT + 'px';
+    paneBot.style.height = newB + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    dragging = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+// ══════════════════════════════════════════════
+//  BACKUP & RESTORE
+// ══════════════════════════════════════════════
+
+function backupDatabase() {
+  // Trigger download via anchor — browser will hit the API and stream the file
+  const a = document.createElement('a');
+  a.href  = '/api/backup';
+  a.click();
+  toast('✓ Database backup downloading…', 'success');
+}
+
+function triggerRestore() {
+  if (!confirm(
+    'Restore will REPLACE the entire database with the backup file.\n\n' +
+    'All current data will be overwritten. Continue?'
+  )) return;
+  document.getElementById('restore-input').value = '';
+  document.getElementById('restore-input').click();
+}
+
+async function handleRestore(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    toast('Restoring database…', 'success');
+    const res = await fetch('/api/restore', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    // Reload everything from the restored DB
+    [products, markupCodes, categories, settings] = await Promise.all([getProducts(), getMarkups(), getCategories(), getSettings()]);
+    renderProducts();
+    renderMarkupCodes();
+    renderCategories();
+    updateStats();
+    toast(`✓ Database restored from ${file.name}`, 'success');
+  } catch(err) {
+    toast('Restore failed: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  BIN LOCATION REPORT
+// ══════════════════════════════════════════════
+
+async function printBinReport() {
+  try {
+    const data = await api('GET', '/reports/bin-location');
+    if (!data.total) { toast('No stocked items found for report', 'error'); return; }
+
+    const now = new Date().toLocaleString();
+
+    const groupsHTML = data.groups.map(g => {
+      const rows = g.items.map(p => `
+        <tr>
+          <td>${esc(p.bin_location||'—')}</td>
+          <td>${esc(p.sku||'')}</td>
+          <td>${esc(p.name||'')}</td>
+          <td>${esc(p.category||'')}</td>
+          <td>${esc(p.preferred_supplier||'')}</td>
+          <td>${esc(p.supplier_part_number||'')}</td>
+          <td class="num">$${(p.sell_price||0).toFixed(2)}</td>
+        </tr>`).join('');
+      return `
+        <tr class="group-header">
+          <td colspan="7">📦 ${esc(g.bin)} <span class="count">${g.items.length} item${g.items.length!==1?'s':''}</span></td>
+        </tr>
+        ${rows}`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>Bin Location Report</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Segoe UI',sans-serif; font-size:12px; color:#1e293b; padding:24px; }
+  h1   { font-size:18px; font-weight:700; margin-bottom:2px; }
+  .meta { font-size:11px; color:#64748b; margin-bottom:20px; }
+  table { width:100%; border-collapse:collapse; }
+  th {
+    background:#f1f5f9; text-align:left; padding:6px 10px;
+    font-size:10px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; border-bottom:2px solid #e2e8f0;
+    border-right:1px solid #e2e8f0;
+  }
+  th:last-child { border-right:none; }
+  td { padding:5px 10px; border-bottom:1px solid #f1f5f9; border-right:1px solid #f1f5f9; }
+  td:last-child { border-right:none; }
+  tr:last-child td { border-bottom:none; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.group-header td {
+    background:#1e293b; color:#fff; font-weight:700;
+    font-size:12px; padding:7px 10px; border:none;
+    border-top:4px solid #3b82f6;
+  }
+  tr.group-header .count {
+    font-weight:400; opacity:.7; font-size:11px; margin-left:8px;
+  }
+  tr:not(.group-header):nth-child(even) { background:#f8fafc; }
+  .footer { margin-top:20px; font-size:10px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:8px; }
+  .summary { margin-bottom:16px; display:flex; gap:16px; flex-wrap:wrap; }
+  .summary-box { padding:8px 14px; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc; }
+  .summary-box .num { font-size:20px; font-weight:700; color:#1d4ed8; }
+  .summary-box .lbl { font-size:10px; color:#64748b; }
+  @media print {
+    body { padding:12px; }
+    .no-print { display:none; }
+    tr.group-header { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head><body>
+<h1>Border to Border Inventory Manager</h1>
+<h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:4px;">Bin Location Report — All Products</h2>
+<div class="meta">Generated: ${now}</div>
+
+<div class="summary">
+  <div class="summary-box"><div class="num">${data.total}</div><div class="lbl">Total products</div></div>
+  <div class="summary-box"><div class="num">${data.groups.length}</div><div class="lbl">Bin locations</div></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:100px">Bin Location</th>
+      <th style="width:110px">SKU</th>
+      <th>Name</th>
+      <th style="width:110px">Category</th>
+      <th style="width:110px">Supplier</th>
+      <th style="width:120px">Supplier Part #</th>
+      <th style="width:80px">Sell Price</th>
+    </tr>
+  </thead>
+  <tbody>${groupsHTML}</tbody>
+</table>
+
+<div class="footer">Border to Border Inventory Manager · Bin Location Report · ${now}</div>
+<script>window.onload = () => window.print();<\/script>
+</body></html>`;
+
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+    else toast('Please allow pop-ups to view the report', 'error');
+
+  } catch(err) {
+    toast('Report failed: ' + err.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+//  RECALCULATE PRICES
+// ══════════════════════════════════════════════
+
+async function recalculatePrices() {
+  const btn = document.getElementById('btn-recalc');
+  btn.disabled = true;
+  btn.textContent = '↻ Recalculating…';
+  try {
+    const result = await recalcAPI();
+    products = result.products;
+    _bustSort();
+    renderProducts();
+    toast(`✓ Recalculated sell prices for ${result.updated} products`, 'success');
+  } catch(e) {
+    toast('Recalculate failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Recalculate Prices';
+  }
+}
+
+//  SETTINGS
+// ══════════════════════════════════════════════
+
+function openSettings() {
+  // Populate the markup dropdown with current codes
+  const sel = document.getElementById('setting-default-markup');
+  sel.innerHTML = '<option value="">— none —</option>' +
+    markupCodes.map(m =>
+      `<option value="${esc(m.code)}" ${m.code === settings.default_markup_code ? 'selected' : ''}>
+        ${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)
+      </option>`
+    ).join('');
+  document.getElementById('settings-panel').classList.add('open');
+  document.getElementById('settings-backdrop').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-panel').classList.remove('open');
+  document.getElementById('settings-backdrop').classList.remove('open');
+}
+
+async function saveSettings() {
+  const code = document.getElementById('setting-default-markup').value || '';
+  try {
+    settings = await putSettings({ default_markup_code: code });
+    closeSettings();
+    toast(code
+      ? `✓ Default markup set to ${code}`
+      : '✓ Default markup cleared', 'success');
+  } catch(e) {
+    toast('Failed to save settings: ' + e.message, 'error');
+  }
+}
+
+// Helper: returns the default markup code from settings (or '' if none)
+function defaultMarkup() { return settings.default_markup_code || ''; }
+
+// ══════════════════════════════════════════════
+//  TABLE EVENT DELEGATION
+//  Set up once — handles all row interactions
+//  without re-attaching on every render
+// ══════════════════════════════════════════════
+function initTableDelegation() {
+  const tbody = document.getElementById('prod-body');
+
+  // Delegated dblclick — editable text cells
+  tbody.addEventListener('dblclick', e => {
+    const display = e.target.closest('td.editable:not(.select-cell) .cell-display');
+    if (display) startEdit(display);
+  });
+
+  // Delegated click — markup_code select-cell (single click)
+  tbody.addEventListener('click', e => {
+    const display = e.target.closest('td.select-cell .cell-display');
+    if (display) { startEdit(display); return; }
+
+    // Stocked checkbox
+    const cb = e.target.closest('.stocked-toggle');
+    if (cb) return; // handled by change event below
+
+    // Row selection — click outside editable/button areas
+    const tr = e.target.closest('tr[id^="row-"]');
+    if (!tr) return;
+    if (e.target.closest('td.editable, td.select-cell, button, input')) return;
+    const id = parseInt(tr.id.replace('row-', ''));
+    if (!id) return;
+    const nowSelected = !selected.has(id);
+    if (nowSelected) selected.add(id); else selected.delete(id);
+    tr.classList.toggle('selected', nowSelected);
+    updateDeleteBtn();
+  });
+
+  // Delegated change — stocked checkbox
+  tbody.addEventListener('change', async e => {
+    const cb = e.target.closest('.stocked-toggle');
+    if (!cb) return;
+    const pid = +cb.dataset.pid;
+    try {
+      const updated = await patchProduct(pid, { is_stocked: cb.checked });
+      const idx = products.findIndex(p => p.id === pid);
+      if (idx !== -1) products[idx] = updated;
+      _bustSort();
+      cb.title = cb.checked ? 'In stock' : 'Not stocked';
+    } catch(err) {
+      cb.checked = !cb.checked;
+      toast('Failed to update: ' + err.message, 'error');
+    }
+  });
+}
+
+// ══════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════
+function fmt(v) {
+  if (v == null) return '—';
+  return parseFloat(v).toFixed(4);
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function updateStats() {
+  document.getElementById('stat-count').textContent =
+    `${products.length} product${products.length !== 1 ? 's' : ''}`;
+}
+function setSaved() {
+  const el = document.getElementById('save-indicator');
+  el.textContent = '● Saved';
+  el.style.color = 'var(--green)';
+}
+
+let _toastTimer;
+function toast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'show ' + type;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// Close modals on backdrop click
+document.getElementById('prod-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeProdModal();
+});
+document.getElementById('mu-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeMuModal();
+});
+document.getElementById('import-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeImportModal();
+});
+document.getElementById('sm8-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSM8Modal();
+});
+document.getElementById('middys-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeMiddysModal();
+});
+document.getElementById('voltex-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeVoltexModal();
+});
+document.getElementById('actrol-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeActrolModal();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeProdModal(); closeMuModal(); closeImportModal(); closeSM8Modal(); closeMiddysModal(); closeVoltexModal(); closeActrolModal(); closeSettings(); cancelEdit(); }
+});
+
+// ══════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
