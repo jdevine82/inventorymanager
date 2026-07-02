@@ -59,7 +59,7 @@
   main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 14px 20px 12px; gap: 12px; }
 
   /* ── Toolbar ── */
-  .toolbar { display: flex; gap: 7px; align-items: center; flex-shrink: 0; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; flex-shrink: 0; }
   .toolbar-right { margin-left: auto; display: flex; gap: 7px; align-items: center; }
 
   /* ── Buttons ── */
@@ -77,8 +77,12 @@
   button.btn-import:hover { background:#1e4068; }
   button.btn-export { background:#2d2214; border-color:#f59e0b; color:var(--amber); }
   button.btn-export:hover { background:#3d2c18; }
-  button.btn-sm8-export { background:#1e2a1e; border-color:#4ade80; color:#86efac; }
-  button.btn-sm8-export:hover { background:#243324; border-color:var(--green); }
+  button.btn-sm8-sync { background:#1e2a2a; border-color:#22d3ee; color:#67e8f9; }
+  button.btn-sm8-sync:hover { background:#1e3535; border-color:#06b6d4; }
+  button.btn-sm8-sync:disabled { opacity:.5; cursor:not-allowed; }
+  button.btn-sm8-pull { background:#1a2740; border-color:#60a5fa; color:#93c5fd; }
+  button.btn-sm8-pull:hover { background:#20304f; border-color:#3b82f6; }
+  button.btn-sm8-pull:disabled { opacity:.5; cursor:not-allowed; }
   button.btn-backup  { background:#1e2535; border-color:#6366f1; color:#a5b4fc; }
   button.btn-backup:hover  { background:#252d45; border-color:#818cf8; }
   button.btn-restore { background:#2a1e2a; border-color:#c084fc; color:#d8b4fe; }
@@ -89,8 +93,6 @@
   button.btn-danger:hover { background:#3d1a1a; }
   button.btn-add    { background:#1e1f35; border-color:#7c3aed; color:var(--violet); }
   button.btn-add:hover    { background:#26234a; }
-  button.btn-sm8    { background:#1e2a1e; border-color:#4ade80; color:#86efac; }
-  button.btn-sm8:hover    { background:#243324; border-color:var(--green); }
   button.btn-middys { background:#1e2535; border-color:#38bdf8; color:#7dd3fc; }
   button.btn-middys:hover { background:#1e3045; border-color:#0ea5e9; }
   button.btn-voltex { background:#2a1e35; border-color:#c084fc; color:#d8b4fe; }
@@ -117,11 +119,6 @@
     transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none;
   }
 
-  /* ── Legend ── */
-  .legend {
-    font-size: 10px; color: #475569; padding: 2px 7px;
-    background: var(--surface); border: 1px solid #1e2740; border-radius: 4px;
-  }
 
   /* ── Splitter ── */
   .split-container { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
@@ -345,6 +342,7 @@
   }
   .preview-table tr:last-child td { border-bottom: none; }
   .preview-note { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .sm8-sync-preview-table td { white-space: normal; word-break: break-word; vertical-align: top; }
   .import-progress { font-size: 11px; color: var(--subtle); margin-right: auto; }
 
   /* ── Settings panel ── */
@@ -472,12 +470,12 @@
     <!-- Product toolbar -->
     <div class="toolbar">
       <button class="btn-import" onclick="triggerImport()">⬆ Import CSV</button>
-      <button class="btn-sm8"    onclick="triggerSM8()">⬆ Import SM8</button>
+      <button class="btn-sm8-pull" id="btn-sm8-import-api" onclick="importSM8API()">⬇ Import SM8 (API)</button>
       <button class="btn-middys" onclick="triggerMiddys()">⬆ Import Middys</button>
       <button class="btn-voltex" onclick="triggerVoltex()">⬆ Import Voltex</button>
       <button class="btn-actrol"  onclick="triggerActrol()">⬆ Import Actrol</button>
       <button class="btn-export"     onclick="exportCSV()">⬇ Export CSV</button>
-      <button class="btn-sm8-export" onclick="exportSM8()">⬇ Export SM8</button>
+      <button class="btn-sm8-sync" id="btn-sm8-sync" onclick="syncSM8()">⇄ Sync SM8 API</button>
       <button class="btn-green"  onclick="openAddProduct()">＋ Add Product</button>
       <button class="btn-danger" onclick="deleteSelected()" id="btn-delete" disabled>✕ Delete Selected</button>
       <button id="btn-recalc" onclick="recalculatePrices()"
@@ -488,7 +486,6 @@
         <button class="btn-report"  onclick="printBinReport()"  title="Printable report of stocked items by bin location">📋 Bin Report</button>
         <button class="btn-backup"  onclick="backupDatabase()"  title="Download a backup of the database">⬇ Backup DB</button>
         <button class="btn-restore" onclick="triggerRestore()"  title="Restore database from a backup file">⬆ Restore DB</button>
-        <span class="legend">* auto-calculated</span>
         <div class="search-wrap">
           <input type="text" id="search" placeholder="Search products…" oninput="applyFilter()">
         </div>
@@ -777,6 +774,34 @@
   </div>
 </div>
 
+<!-- SM8 Sync Preview Modal -->
+<div class="modal-backdrop hidden" id="sm8-sync-preview-modal">
+  <div class="modal" style="width:1100px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
+    <div class="import-header">
+      <h2>Sync to ServiceM8 — Preview</h2>
+      <p id="sm8-preview-summary">Checking…</p>
+    </div>
+    <div class="import-body" style="flex:1;overflow-y:auto;padding:16px 22px;">
+      <div class="map-section-title">Sample of changes</div>
+      <div class="preview-wrap">
+        <table class="preview-table sm8-sync-preview-table" style="table-layout:fixed;width:100%;">
+          <colgroup>
+            <col style="width:14%"><col style="width:26%"><col style="width:10%"><col style="width:50%">
+          </colgroup>
+          <thead><tr><th>SKU</th><th>Name</th><th>Action</th><th>Field changes</th></tr></thead>
+          <tbody id="sm8-sync-preview-body"></tbody>
+        </table>
+      </div>
+      <p class="preview-note" id="sm8-sync-preview-note"></p>
+    </div>
+    <div class="import-footer">
+      <span class="import-progress" id="sm8-sync-progress"></span>
+      <button id="btn-cancel-sm8-sync" onclick="closeSM8SyncPreview()">Cancel</button>
+      <button class="btn-green" id="btn-approve-sm8-sync" onclick="approveSM8Sync()">Approve &amp; Sync</button>
+    </div>
+  </div>
+</div>
+
 <!-- Voltex Import Modal -->
 <div class="modal-backdrop hidden" id="voltex-modal">
   <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;">
@@ -889,6 +914,14 @@
       <p class="hint">Pre-filled when adding products via Middys import, SM8 import, or the Add Product form. Can always be overridden per item.</p>
     </div>
 
+    <div class="settings-section-title">ServiceM8 Integration</div>
+
+    <div class="settings-row">
+      <label>ServiceM8 API Key</label>
+      <input type="password" id="setting-sm8-key" autocomplete="off" placeholder="Paste API key from ServiceM8 → Settings → API Keys">
+      <p class="hint">Used by "Sync to SM8" to push products directly to ServiceM8 Materials via the API — same field mapping as the SM8 CSV export (SKU → Item Number, Name, Cost, Price, Stocked → Item is Inventoried). Stored locally, never committed to git.</p>
+    </div>
+
   </div>
   <div class="settings-footer">
     <button onclick="closeSettings()">Cancel</button>
@@ -898,7 +931,6 @@
 
 <div id="toast"></div>
 <input type="file" id="csv-input"  accept=".csv" onchange="handleCSV(event)">
-<input type="file" id="sm8-input"     accept=".csv" onchange="handleSM8(event)">
 <input type="file" id="middys-input"  accept=".csv" onchange="handleMiddys(event)">
 <input type="file" id="voltex-input"   accept=".csv" onchange="handleVoltex(event)">
 <input type="file" id="actrol-input"    accept=".csv" onchange="handleActrol(event)">
@@ -1094,7 +1126,7 @@
 let products    = [];
 let markupCodes = [];
 let categories  = [];
-let settings    = { default_markup_code: '' };
+let settings    = { default_markup_code: '', servicem8_api_key: '' };
 let selected    = new Set();   // product ids
 let selectedMu  = new Set();   // markup codes
 let sortCol     = 'is_stocked';
@@ -1127,6 +1159,10 @@ const getMarkups     = ()     => api('GET',    '/markup-codes');
 const getCategories  = ()     => api('GET',    '/categories');
 const getSettings    = ()     => api('GET',    '/settings');
 const putSettings    = body   => api('PUT',    '/settings', body);
+const sm8Sync         = body  => api('POST',   '/sm8/sync', body);
+const sm8SyncOne      = id    => api('POST',   '/sm8/sync/one', { product_id: id });
+const sm8SyncPreview  = body  => api('POST',   '/sm8/sync/preview', body);
+const getSM8Materials = ()    => api('GET',    '/sm8/materials');
 const recalcAPI      = ()     => api('POST',   '/products/recalculate');
 const postProduct    = body   => api('POST',   '/products', body);
 const patchProduct   = (id,b) => api('PATCH',  `/products/${id}`, b);
@@ -2146,104 +2182,141 @@ function exportCSV() {
   toast('✓ CSV downloaded', 'success');
 }
 
-function exportSM8() {
+// ══════════════════════════════════════════════
+//  SM8 API SYNC
+//  Reads current ServiceM8 Material data, diffs it against local products,
+//  and shows a preview before pushing anything. Same field mapping as the
+//  SM8 CSV export (SKU→Item Number, Name, Cost, Price, Stocked→Inventoried).
+// ══════════════════════════════════════════════
+let sm8PreviewState = { changed_ids: [] };
+
+async function syncSM8() {
+  if (!settings.servicem8_api_key) {
+    toast('Add a ServiceM8 API key in Settings first', 'error');
+    openSettings();
+    return;
+  }
+
   const rows = getFiltered();
-  if (!rows.length) { toast('No products to export', 'error'); return; }
+  if (!rows.length) { toast('No products to sync', 'error'); return; }
 
-  // SM8 import format — must match the exact column structure SM8 expects:
-  // col0=?,  col1=?,  col2=Item Number,  col3=Name,  col4=Purchase Cost,
-  // col5=Quantity In Stock,  col6=Price,  col7=Price Includes Taxes,
-  // col8=Tax Rate,  col9=Item is Inventoried,  col10=Barcode
-  const header = ['', '', 'Item Number', 'Name', 'Purchase Cost',
-                  'Quantity In Stock', 'Price', 'Price Includes Taxes',
-                  'Tax Rate', 'Item is Inventoried', 'Barcode'];
+  const btn = document.getElementById('btn-sm8-sync');
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Checking…';
 
-  const csvField = v => {
-    const s = String(v ?? '');
-    return s.includes(',') || s.includes('"') || s.includes('\n')
-      ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  try {
+    const preview = await sm8SyncPreview({ product_ids: rows.map(p => p.id) });
+    renderSM8SyncPreview(preview);
+  } catch (e) {
+    toast('SM8 preview failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
 
-  const lines = [header.join(',')];
+function sm8FmtChange(field, val) {
+  if (val === null || val === undefined) return '—';
+  if (field === 'cost' || field === 'price') return '$' + Number(val).toFixed(2);
+  if (field === 'item_is_inventoried') return val ? 'Yes' : 'No';
+  return esc(String(val));
+}
 
-  rows.forEach(p => {
-    const itemNumber  = p.sku        || '';
-    const name        = p.name       || '';
-    const purchaseCost = (p.unit_cost  || 0).toFixed(4);   // unit cost = pack_cost / pack_qty
-    const price       = (p.sell_price || 0).toFixed(4);    // sell price from markup
-    const isInventoried = p.is_stocked ? 'Yes' : 'No';
+const SM8_FIELD_LABELS = { name: 'Name', cost: 'Cost', price: 'Price', item_is_inventoried: 'Inventoried' };
 
-    // col0 and col1 are left blank (SM8 internal flags, not needed for import)
-    const cols = [
-      '',               // col0 — SM8 internal
-      '',               // col1 — SM8 internal
-      csvField(itemNumber),
-      csvField(name),
-      purchaseCost,     // Purchase Cost
-      '0',              // Quantity In Stock — not tracked here
-      price,            // Price (sell price)
-      '',               // Price Includes Taxes — leave blank, SM8 handles
-      '',               // Tax Rate — leave blank
-      isInventoried,    // Item is Inventoried
-      '',               // Barcode — leave blank
-    ];
-    lines.push(cols.join(','));
-  });
+function renderSM8SyncPreview(preview) {
+  sm8PreviewState = preview;
+  const total = preview.creates + preview.updates;
 
-  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
-  const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  const ts   = new Date().toISOString().slice(0,10);
-  a.download = `sm8_update_${ts}.csv`;
-  a.click();
-  toast(`✓ SM8 export — ${rows.length} products`, 'success');
+  document.getElementById('sm8-preview-summary').innerHTML =
+    `<strong style="color:var(--green)">${preview.creates}</strong> new · ` +
+    `<strong style="color:var(--amber)">${preview.updates}</strong> updated · ` +
+    `${preview.unchanged} already in sync` +
+    (preview.no_sku ? ` · ${preview.no_sku} skipped (no SKU)` : '');
+
+  const tbody = document.getElementById('sm8-sync-preview-body');
+  if (!preview.preview.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted)">No differences found — everything is already in sync</td></tr>`;
+  } else {
+    tbody.innerHTML = preview.preview.map(d => {
+      const changeLines = Object.entries(d.changes).map(([field, c]) =>
+        `<div><span style="color:var(--muted)">${SM8_FIELD_LABELS[field] || field}:</span> ${sm8FmtChange(field, c.from)} → <strong>${sm8FmtChange(field, c.to)}</strong></div>`
+      ).join('');
+      const actionColor = d.action === 'create' ? 'var(--green)' : 'var(--amber)';
+      return `<tr>
+        <td>${esc(d.sku)}</td>
+        <td>${esc((d.name || '').slice(0,50))}</td>
+        <td><span style="color:${actionColor};font-weight:600;font-size:11px">${d.action === 'create' ? 'New' : 'Update'}</span></td>
+        <td style="font-size:11px">${changeLines}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('sm8-sync-preview-note').textContent =
+    total > preview.preview.length ? `Showing ${preview.preview.length} of ${total} changed item(s)` : '';
+
+  const approveBtn = document.getElementById('btn-approve-sm8-sync');
+  approveBtn.textContent = `Approve & Sync (${total})`;
+  approveBtn.disabled = total === 0;
+
+  document.getElementById('sm8-sync-preview-modal').classList.remove('hidden');
+}
+
+function closeSM8SyncPreview() {
+  document.getElementById('sm8-sync-preview-modal').classList.add('hidden');
+}
+
+async function approveSM8Sync() {
+  const ids = sm8PreviewState.changed_ids || [];
+  if (!ids.length) { closeSM8SyncPreview(); return; }
+
+  const toolbarBtn = document.getElementById('btn-sm8-sync');
+  const approveBtn = document.getElementById('btn-approve-sm8-sync');
+  const cancelBtn  = document.getElementById('btn-cancel-sm8-sync');
+  const prog       = document.getElementById('sm8-sync-progress');
+
+  toolbarBtn.disabled = true;
+  approveBtn.disabled = true;
+  cancelBtn.disabled  = true;
+
+  let created = 0, updated = 0;
+  const failed = [];
+
+  for (let i = 0; i < ids.length; i++) {
+    prog.textContent = `Syncing ${i + 1} / ${ids.length}…`;
+    try {
+      const r = await sm8SyncOne(ids[i]);
+      if (r.action === 'created') created++;
+      else if (r.action === 'updated') updated++;
+      else failed.push(r);
+    } catch (e) {
+      failed.push({ id: ids[i], error: e.message });
+    }
+  }
+
+  closeSM8SyncPreview();
+  prog.textContent = '';
+  toolbarBtn.disabled = false;
+  approveBtn.disabled = false;
+  cancelBtn.disabled  = false;
+
+  const parts = [`${created} created`, `${updated} updated`];
+  if (failed.length) parts.push(`${failed.length} failed`);
+  toast(`✓ SM8 sync — ${parts.join(', ')}`, failed.length ? 'error' : 'success');
+  if (failed.length) console.warn('SM8 sync failures:', failed);
 }
 
 // ══════════════════════════════════════════════
 //  SM8 IMPORT
 // ══════════════════════════════════════════════
 
-// SM8 CSV column indices (0-based):
-// 0=?, 1=?, 2=Item Number, 3=Name, 4=Purchase Cost,
-// 5=Quantity In Stock, 6=Price, 7=Price Includes Taxes,
-// 8=Tax Rate, 9=Item is Inventoried, 10=Barcode
-
 let sm8State = { rows: [], mode: 'replace' };
 
-function triggerSM8() {
-  document.getElementById('sm8-input').value = '';
-  document.getElementById('sm8-input').click();
-}
-
-async function handleSM8(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const text  = await file.text();
-  const lines = text.replace(/\r/g, '').replace(/^\uFEFF/, '').trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) { toast('SM8 CSV has no data', 'error'); return; }
-
-  const header = parseCSVLine(lines[0]).map(h => h.trim());
-
-  // Locate columns by name (robust — works even if SM8 adds/removes cols)
-  const col = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
-  const iSKU  = col('Item Number');
-  const iName = col('Name');
-  const iCost = col('Purchase Cost');
-  const iInv  = col('Item is Inventoried');
-
-  if (iInv === -1) {
-    toast('Could not find "Item is Inventoried" column in this file', 'error'); return;
-  }
-
-  const allRows = lines.slice(1).map(l => parseCSVLine(l));
-  const invRows = allRows.filter(r => (r[iInv] || '').trim().toLowerCase() === 'yes'
-                                   && (r[iSKU]  || '').trim() !== '');
-
-  if (!invRows.length) {
-    toast('No inventoried items found in file', 'error'); return;
-  }
-
-  sm8State = { rows: invRows, mode: 'replace', iSKU, iName, iCost };
+// Populates and opens the SM8 import modal for the data fetched by importSM8API.
+// Row shape: [item_number, name, cost] at indices 0,1,2 (see importSM8API).
+function openSM8ImportModal(rows, iSKU, iName, iCost, filenameHtml) {
+  sm8State = { rows, mode: 'replace', iSKU, iName, iCost };
 
   // Populate markup dropdown — pre-select system default
   const sel = document.getElementById('sm8-markup-select');
@@ -2253,13 +2326,38 @@ async function handleSM8(e) {
       `<option value="${esc(m.code)}" ${m.code === def ? 'selected' : ''}>${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)</option>`
     ).join('');
 
-  document.getElementById('sm8-filename').innerHTML =
-    `File: <strong>${esc(file.name)}</strong> · 
-     <span style="color:var(--green)">${invRows.length} inventoried items</span> of ${allRows.length} total rows`;
+  document.getElementById('sm8-filename').innerHTML = filenameHtml;
 
   setSM8Mode('replace');
   renderSM8Preview();
   document.getElementById('sm8-modal').classList.remove('hidden');
+}
+
+async function importSM8API() {
+  if (!settings.servicem8_api_key) {
+    toast('Add a ServiceM8 API key in Settings first', 'error');
+    openSettings();
+    return;
+  }
+  const btn = document.getElementById('btn-sm8-import-api');
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Fetching…';
+  try {
+    const materials = await getSM8Materials();
+    if (!materials.length) { toast('No inventoried items found in ServiceM8', 'error'); return; }
+
+    // Reuse the SM8 CSV row shape: [item_number, name, cost] at indices 0,1,2
+    const invRows = materials.map(m => [m.item_number, m.name, m.cost]);
+
+    openSM8ImportModal(invRows, 0, 1, 2,
+      `Source: <strong>ServiceM8 API</strong> · <span style="color:var(--green)">${invRows.length} inventoried items</span>`);
+  } catch (e) {
+    toast('ServiceM8 fetch failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
 }
 
 function setSM8Mode(mode) {
@@ -2278,7 +2376,7 @@ function renderSM8Preview() {
     `<tbody>${preview.map(r => `<tr>
       <td>${esc((r[iSKU]||'').trim())}</td>
       <td>${esc((r[iName]||'').trim().slice(0,60))}${(r[iName]||'').length>60?'…':''}</td>
-      <td>$${parseFloat((r[iCost]||'0').trim()).toFixed(4)}</td>
+      <td>$${(parseFloat(r[iCost]) || 0).toFixed(4)}</td>
     </tr>`).join('')}</tbody>`;
   document.getElementById('sm8-preview-note').textContent =
     `Showing 5 of ${rows.length} inventoried items · Pack Qty defaults to 1`;
@@ -3362,6 +3460,7 @@ function openSettings() {
         ${esc(m.code)} — ${esc(m.description||'')} (${m.markup_pct}%)
       </option>`
     ).join('');
+  document.getElementById('setting-sm8-key').value = settings.servicem8_api_key || '';
   document.getElementById('settings-panel').classList.add('open');
   document.getElementById('settings-backdrop').classList.add('open');
 }
@@ -3372,9 +3471,10 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-  const code = document.getElementById('setting-default-markup').value || '';
+  const code   = document.getElementById('setting-default-markup').value || '';
+  const sm8Key = document.getElementById('setting-sm8-key').value.trim();
   try {
-    settings = await putSettings({ default_markup_code: code });
+    settings = await putSettings({ default_markup_code: code, servicem8_api_key: sm8Key });
     closeSettings();
     toast(code
       ? `✓ Default markup set to ${code}`
@@ -3508,7 +3608,7 @@ document.getElementById('actrol-modal').addEventListener('click', e => {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeProdModal(); closeMuModal(); closeImportModal(); closeSM8Modal(); closeMiddysModal(); closeVoltexModal(); closeActrolModal(); closeSettings(); cancelEdit(); }
+  if (e.key === 'Escape') { closeProdModal(); closeMuModal(); closeImportModal(); closeSM8Modal(); closeSM8SyncPreview(); closeMiddysModal(); closeVoltexModal(); closeActrolModal(); closeSettings(); cancelEdit(); }
 });
 
 // ══════════════════════════════════════════════

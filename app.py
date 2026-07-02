@@ -4,12 +4,15 @@ Run: python app.py
 Access: http://<your-pi-ip>:8000
 """
 
+import re
 import sqlite3
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
+import requests
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -17,6 +20,7 @@ from pydantic import BaseModel
 import uvicorn
 
 DB_PATH = "prices.db"
+SM8_API_BASE = "https://api.servicem8.com/api_1.0"
 
 # ══════════════════════════════════════════════
 #  DATABASE
@@ -68,6 +72,7 @@ def init_db():
         "bin_location":         "TEXT",
         "supplier_part_number": "TEXT",
         "is_stocked":           "INTEGER DEFAULT 0",
+        "sm8_uuid":             "TEXT",
     }
     for col, typedef in new_cols.items():
         if col not in existing_cols:
@@ -172,6 +177,14 @@ class MarkupCodeUpdate(BaseModel):
 
 class SettingsIn(BaseModel):
     default_markup_code: Optional[str] = None
+    servicem8_api_key:   Optional[str] = None
+
+
+class SM8SyncRequest(BaseModel):
+    product_ids: Optional[list[int]] = None
+
+class SM8SyncOneRequest(BaseModel):
+    product_id: int
 
 
 # ══════════════════════════════════════════════
@@ -390,7 +403,10 @@ def get_settings():
     rows   = conn.execute("SELECT key, value FROM settings").fetchall()
     conn.close()
     result = {r["key"]: r["value"] for r in rows}
-    return {"default_markup_code": result.get("default_markup_code", "")}
+    return {
+        "default_markup_code": result.get("default_markup_code", ""),
+        "servicem8_api_key":   result.get("servicem8_api_key", ""),
+    }
 
 @app.put("/api/settings")
 def save_settings(body: SettingsIn):
@@ -400,9 +416,15 @@ def save_settings(body: SettingsIn):
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         ("default_markup_code", body.default_markup_code or "")
     )
+    if body.servicem8_api_key is not None:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            ("servicem8_api_key", body.servicem8_api_key.strip())
+        )
     conn.commit()
     conn.close()
-    return {"default_markup_code": body.default_markup_code or ""}
+    return get_settings()
 
 
 # ── Backup & Restore ──────────────────────────
@@ -485,6 +507,371 @@ def report_bin_location():
     return {
         "total":  len(enriched),
         "groups": [{"bin": k, "items": v} for k, v in groups.items()],
+    }
+
+
+# ── ServiceM8 API Sync ────────────────────────
+# Field mapping mirrors the SM8 CSV export: sku → item_number, name → name,
+# unit_cost → cost, sell_price → price, is_stocked → item_is_inventoried.
+# quantity_in_stock is intentionally omitted so existing SM8 stock counts
+# aren't reset — this app doesn't track stock quantity.
+
+def get_sm8_api_key(conn) -> str:
+    row = conn.execute("SELECT value FROM settings WHERE key='servicem8_api_key'").fetchone()
+    key = (row["value"] if row else "") or ""
+    if not key:
+        raise HTTPException(400, "ServiceM8 API key not set — add it in Settings first")
+    return key
+
+def sm8_headers(api_key: str) -> dict:
+    return {"X-Api-Key": api_key, "Content-Type": "application/json", "Accept": "application/json"}
+
+def sm8_request(method: str, url: str, *, timeout: int = 15, **kwargs) -> requests.Response:
+    """
+    requests.request with retry/backoff for transient SM8 errors (429 rate
+    limiting, 5xx). A full-catalog sync makes hundreds of sequential calls,
+    and that was observed to trigger 429s partway through, surfacing as
+    permanent "failed" items even though the same request succeeds instantly
+    on its own. Retry a few times with backoff before giving up for real.
+    """
+    max_attempts = 4
+    delay = 1.0
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.request(method, url, timeout=timeout, **kwargs)
+        except requests.exceptions.RequestException:
+            if attempt == max_attempts:
+                raise
+            time.sleep(delay)
+            delay *= 2
+            continue
+
+        if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts:
+            retry_after = resp.headers.get("Retry-After")
+            wait = float(retry_after) if retry_after and retry_after.replace(".", "", 1).isdigit() else delay
+            time.sleep(wait)
+            delay *= 2
+            continue
+
+        return resp
+    return resp  # pragma: no cover — loop always returns or raises above
+
+def sm8_find_uuid_by_item_number(api_key: str, item_number: str) -> Optional[str]:
+    """
+    Match by item_number, active records only. SM8 accounts can end up with
+    multiple Materials sharing an item_number (e.g. an old deleted/inactive
+    duplicate) — matching on item_number alone can pick the wrong one and
+    push updates into a dead record forever instead of the real one.
+    """
+    escaped = item_number.replace("'", "''")
+    resp = sm8_request(
+        "GET", f"{SM8_API_BASE}/material.json",
+        headers=sm8_headers(api_key),
+        params={"$filter": f"item_number eq '{escaped}' and active eq 1"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    matches = resp.json()
+    return matches[0]["uuid"] if matches else None
+
+def sm8_paginate_materials(api_key: str, filter_expr: Optional[str] = None):
+    """Yield raw Material dicts from ServiceM8, following cursor pagination."""
+    cursor = "-1"
+    for _ in range(500):   # safety cap — 500 pages x 1000 records is far beyond any real catalog
+        params = {"cursor": cursor}
+        if filter_expr:
+            params["$filter"] = filter_expr
+        try:
+            resp = sm8_request(
+                "GET", f"{SM8_API_BASE}/material.json", headers=sm8_headers(api_key), params=params, timeout=20,
+            )
+            resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            raise HTTPException(502, f"ServiceM8 request failed: {e}")
+        yield from resp.json()
+        cursor = resp.headers.get("x-next-cursor")
+        if not cursor:
+            break
+
+def sm8_fetch_all_materials(api_key: str) -> dict:
+    """Every active Material in SM8 (any inventoried state), keyed by lowercased item_number."""
+    by_item_number = {}
+    for m in sm8_paginate_materials(api_key, "active eq 1"):
+        item_number = (m.get("item_number") or "").strip()
+        if not item_number:
+            continue
+        by_item_number[item_number.lower()] = {
+            "uuid":                m.get("uuid"),
+            "name":                m.get("name") or "",
+            "cost":                m.get("cost"),
+            "price":               m.get("price"),
+            "item_is_inventoried": m.get("item_is_inventoried"),
+        }
+    return by_item_number
+
+# SM8 silently flattens typographic punctuation to plain ASCII when it saves
+# a Material name (en/em dash -> hyphen, curly quotes -> straight quotes).
+# Supplier CSV descriptions (Middys etc.) often contain the typographic form,
+# so without normalizing here the diff would flag these as changed forever.
+_SM8_CHAR_NORMALIZE = str.maketrans({
+    "–": "-",    # en dash
+    "—": "-",    # em dash
+    "‘": "'",    # left single quote
+    "’": "'",    # right single quote / apostrophe
+    "“": '"',    # left double quote
+    "”": '"',    # right double quote
+    "™": "(TM)", # trademark symbol -> SM8 transliterates to (TM)
+    "®": "(R)",  # registered symbol -> SM8 transliterates to (R)
+    "©": "(C)",  # copyright symbol -> SM8 transliterates to (C)
+    "|": "",     # pipe -> SM8 deletes it outright (leaving the surrounding spaces as-is)
+})
+
+def sm8_clean_name(name: Optional[str]) -> str:
+    """
+    This app's Middys import formats names as "CODE: Description", but SM8
+    material names don't use that colon convention. Strip it and normalize
+    punctuation so pushed/compared names match what's actually in SM8
+    instead of drifting forever.
+    """
+    cleaned = re.sub(r"\s*:\s*", " ", name or "").strip()
+    return cleaned.translate(_SM8_CHAR_NORMALIZE)
+
+def sm8_build_payload(product: dict) -> dict:
+    return {
+        "name":                sm8_clean_name(product.get("name")),
+        "item_number":         (product.get("sku") or "").strip(),
+        "cost":                f"{product['unit_cost']:.4f}",
+        "price":               f"{product['sell_price']:.4f}",
+        "item_is_inventoried": 1 if product.get("is_stocked") else 0,
+    }
+
+def sm8_bool(v) -> bool:
+    """
+    SM8 returns boolean-ish fields inconsistently — item_is_inventoried comes
+    back as the *string* "0"/"1" (where bool("0") is True in Python!), while
+    other flags come back as real ints. Handle both.
+    """
+    if isinstance(v, str):
+        return v.strip() not in ("", "0", "false", "False", "no", "No")
+    return bool(v)
+
+def sm8_diff_fields(payload: dict, existing: dict) -> dict:
+    """Compare an intended SM8 payload against SM8's current record. Returns only changed fields."""
+    changes = {}
+
+    if (existing.get("name") or "") != (payload["name"] or ""):
+        changes["name"] = {"from": existing.get("name") or "", "to": payload["name"]}
+
+    def _num(v):
+        try:
+            return round(float(v), 4)
+        except (TypeError, ValueError):
+            return None
+
+    existing_cost, intended_cost = _num(existing.get("cost")), _num(payload["cost"])
+    if existing_cost != intended_cost:
+        changes["cost"] = {"from": existing_cost, "to": intended_cost}
+
+    existing_price, intended_price = _num(existing.get("price")), _num(payload["price"])
+    if existing_price != intended_price:
+        changes["price"] = {"from": existing_price, "to": intended_price}
+
+    existing_inv  = sm8_bool(existing.get("item_is_inventoried"))
+    intended_inv  = sm8_bool(payload["item_is_inventoried"])
+    if existing_inv != intended_inv:
+        changes["item_is_inventoried"] = {"from": existing_inv, "to": intended_inv}
+
+    return changes
+
+def sm8_create_material(api_key: str, payload: dict) -> Optional[str]:
+    resp = sm8_request(
+        "POST", f"{SM8_API_BASE}/material.json", headers=sm8_headers(api_key), json=payload, timeout=15
+    )
+    resp.raise_for_status()
+    return resp.headers.get("x-record-uuid")
+
+def sm8_update_material(api_key: str, uuid: str, payload: dict):
+    resp = sm8_request(
+        "POST", f"{SM8_API_BASE}/material/{uuid}.json", headers=sm8_headers(api_key), json=payload, timeout=15
+    )
+    resp.raise_for_status()
+
+def sm8_push_product(api_key: str, product: dict) -> tuple[str, Optional[str]]:
+    """
+    Push one product to SM8. Returns (result, uuid) where result is 'created' or 'updated'.
+
+    Always resolves the target record via the active item_number lookup rather
+    than trusting a locally cached sm8_uuid — SM8 accounts can end up with an
+    inactive/deleted duplicate sharing the same item_number (e.g. from an
+    earlier failed sync), and a stale cached uuid pointing at that duplicate
+    would otherwise keep updating a dead record forever while the real active
+    one never changes. Re-resolving each time is self-healing: a bad cached
+    uuid gets silently replaced with the correct one.
+    """
+    sku     = (product.get("sku") or "").strip()
+    payload = sm8_build_payload(product)
+
+    uuid = sm8_find_uuid_by_item_number(api_key, sku)
+    if uuid:
+        sm8_update_material(api_key, uuid, payload)
+        return "updated", uuid
+
+    uuid = sm8_create_material(api_key, payload)
+    return "created", uuid
+
+def sm8_sync_row(conn, api_key: str, product: dict) -> dict:
+    """Push one product to SM8 and persist its uuid. Never raises — failures come back in the result."""
+    sku = (product.get("sku") or "").strip()
+    if not sku:
+        return {"id": product["id"], "sku": sku, "name": product.get("name"), "action": "failed", "error": "No SKU / Item Number set"}
+    try:
+        result, uuid = sm8_push_product(api_key, product)
+        if uuid and uuid != product.get("sm8_uuid"):
+            conn.execute("UPDATE products SET sm8_uuid=? WHERE id=?", (uuid, product["id"]))
+        return {"id": product["id"], "sku": sku, "name": product.get("name"), "action": result, "error": None}
+    except requests.exceptions.RequestException as e:
+        return {"id": product["id"], "sku": sku, "name": product.get("name"), "action": "failed", "error": str(e)}
+
+@app.post("/api/sm8/sync/one")
+def sm8_sync_one(body: SM8SyncOneRequest):
+    """Sync a single product — used by the frontend to show per-item sync progress."""
+    conn    = get_conn()
+    api_key = get_sm8_api_key(conn)
+    markups = markup_dict(conn)
+
+    row = conn.execute(f"SELECT {PRODUCT_COLS}, sm8_uuid FROM products WHERE id=?", (body.product_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Product not found")
+
+    product = enrich_product(dict(row), markups)
+    result  = sm8_sync_row(conn, api_key, product)
+    conn.commit()
+    conn.close()
+    return result
+
+@app.post("/api/sm8/sync")
+def sm8_sync(body: SM8SyncRequest):
+    conn    = get_conn()
+    api_key = get_sm8_api_key(conn)
+    markups = markup_dict(conn)
+
+    query  = f"SELECT {PRODUCT_COLS}, sm8_uuid FROM products"
+    params: tuple = ()
+    if body.product_ids:
+        ph = ",".join("?" * len(body.product_ids))
+        query += f" WHERE id IN ({ph})"
+        params = tuple(body.product_ids)
+    rows = conn.execute(query, params).fetchall()
+
+    created, updated, failed = [], [], []
+    for row in rows:
+        product = enrich_product(dict(row), markups)
+        result  = sm8_sync_row(conn, api_key, product)
+        if result["action"] == "created":
+            created.append(result)
+        elif result["action"] == "updated":
+            updated.append(result)
+        else:
+            failed.append(result)
+
+    conn.commit()
+    conn.close()
+    return {
+        "total":   len(rows),
+        "created": len(created),
+        "updated": len(updated),
+        "failed":  failed,
+    }
+
+@app.get("/api/sm8/materials")
+def sm8_list_materials():
+    """
+    Pull inventoried Materials from ServiceM8 via the API. Same filter as
+    the SM8 CSV import (Item is Inventoried = Yes only). Uses ServiceM8's
+    cursor-based pagination (up to 1000 records per page).
+    """
+    conn    = get_conn()
+    api_key = get_sm8_api_key(conn)
+    conn.close()
+
+    materials = []
+    for m in sm8_paginate_materials(api_key, "item_is_inventoried eq 1 and active eq 1"):
+        item_number = (m.get("item_number") or "").strip()
+        if not item_number:
+            continue
+        cost = m.get("cost")
+        materials.append({
+            "item_number": item_number,
+            "name":        m.get("name") or "",
+            "cost":        str(cost) if cost is not None else "",
+        })
+    return materials
+
+@app.post("/api/sm8/sync/preview")
+def sm8_sync_preview(body: SM8SyncRequest):
+    """
+    Dry run for /api/sm8/sync: fetches SM8's current Materials and diffs them
+    against the local products in scope, without writing anything to SM8.
+    Returns counts plus a short sample of the actual field-level changes so
+    the user can review before approving the real sync.
+    """
+    conn    = get_conn()
+    api_key = get_sm8_api_key(conn)
+    markups = markup_dict(conn)
+
+    query  = f"SELECT {PRODUCT_COLS}, sm8_uuid FROM products"
+    params: tuple = ()
+    if body.product_ids:
+        ph = ",".join("?" * len(body.product_ids))
+        query += f" WHERE id IN ({ph})"
+        params = tuple(body.product_ids)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    sm8_materials = sm8_fetch_all_materials(api_key)
+
+    no_sku, unchanged = 0, 0
+    diffs = []
+    for row in rows:
+        product = enrich_product(dict(row), markups)
+        sku     = (product.get("sku") or "").strip()
+        if not sku:
+            no_sku += 1
+            continue
+
+        payload  = sm8_build_payload(product)
+        existing = sm8_materials.get(sku.lower())
+
+        if not existing:
+            diffs.append({
+                "id": product["id"], "sku": sku, "name": product.get("name"),
+                "action": "create",
+                "changes": {
+                    "name":                {"from": None, "to": payload["name"]},
+                    "cost":                {"from": None, "to": round(float(payload["cost"]), 4)},
+                    "price":               {"from": None, "to": round(float(payload["price"]), 4)},
+                    "item_is_inventoried": {"from": None, "to": bool(payload["item_is_inventoried"])},
+                },
+            })
+            continue
+
+        changes = sm8_diff_fields(payload, existing)
+        if changes:
+            diffs.append({"id": product["id"], "sku": sku, "name": product.get("name"), "action": "update", "changes": changes})
+        else:
+            unchanged += 1
+
+    diffs.sort(key=lambda d: (d["sku"] or "").lower())
+
+    return {
+        "total_checked": len(rows),
+        "no_sku":        no_sku,
+        "creates":       sum(1 for d in diffs if d["action"] == "create"),
+        "updates":       sum(1 for d in diffs if d["action"] == "update"),
+        "unchanged":     unchanged,
+        "changed_ids":   [d["id"] for d in diffs],
+        "preview":       diffs[:5],
     }
 
 
